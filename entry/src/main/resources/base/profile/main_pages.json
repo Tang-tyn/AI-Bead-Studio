@@ -1,0 +1,14 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/MainPage",
+    "pages/creator/AICreatePage",
+    "pages/creator/ImageImportPage",
+    "pages/creator/PatternEditorPage",
+    "pages/community/WorkDetailPage",
+    "pages/community/UserProfilePage",
+    "pages/mine/MyWorksPage",
+    "pages/mine/MyFavoritesPage",
+    "pages/settings/SettingsPage"
+  ]
+}

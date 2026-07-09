@@ -1,0 +1,124 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "AI拼豆图纸生成器 - 用AI将照片转换为拼豆图纸"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "AI拼豆图纸生成器"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "AI拼豆"
+    },
+    {
+      "name": "tab_home",
+      "value": "首页"
+    },
+    {
+      "name": "tab_create",
+      "value": "创作"
+    },
+    {
+      "name": "tab_community",
+      "value": "广场"
+    },
+    {
+      "name": "tab_mine",
+      "value": "我的"
+    },
+    {
+      "name": "app_subtitle",
+      "value": "AI拼豆图纸生成器"
+    },
+    {
+      "name": "page_home_title",
+      "value": "我的项目"
+    },
+    {
+      "name": "page_create_title",
+      "value": "创作中心"
+    },
+    {
+      "name": "page_community_title",
+      "value": "作品广场"
+    },
+    {
+      "name": "page_mine_title",
+      "value": "个人中心"
+    },
+    {
+      "name": "btn_import_photo",
+      "value": "导入照片"
+    },
+    {
+      "name": "btn_ai_create",
+      "value": "AI创作"
+    },
+    {
+      "name": "btn_ai_generate",
+      "value": "AI生成"
+    },
+    {
+      "name": "btn_save",
+      "value": "保存"
+    },
+    {
+      "name": "btn_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "btn_confirm",
+      "value": "确认"
+    },
+    {
+      "name": "btn_delete",
+      "value": "删除"
+    },
+    {
+      "name": "btn_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "btn_export",
+      "value": "导出"
+    },
+    {
+      "name": "btn_share",
+      "value": "分享"
+    },
+    {
+      "name": "btn_like",
+      "value": "点赞"
+    },
+    {
+      "name": "btn_collect",
+      "value": "收藏"
+    },
+    {
+      "name": "btn_comment",
+      "value": "评论"
+    },
+    {
+      "name": "msg_loading",
+      "value": "加载中..."
+    },
+    {
+      "name": "msg_empty_projects",
+      "value": "还没有项目，去创作第一个吧！"
+    },
+    {
+      "name": "msg_empty_works",
+      "value": "还没有作品，快去创作吧！"
+    },
+    {
+      "name": "msg_confirm_delete",
+      "value": "确认删除该项目？此操作不可撤销。"
+    },
+    {
+      "name": "msg_network_error",
+      "value": "网络连接失败，请检查网络后重试"
+    }
+  ]
+}
