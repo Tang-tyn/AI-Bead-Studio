@@ -1,97 +1,99 @@
 # TODO.md — 任务看板
 
-## 当前阶段：Phase 1 Step 2（调色板数据）
+## 当前阶段：Phase 1 已完成 → 等待 Phase 2
 
 ---
 
-## 待完成任务
+## Phase 1: 数据模型与调色板系统 ✅
 
-### Phase 1: 数据模型与调色板系统
-- [x] Step 1: Model 数据层 — BeadColor/ColorPalette/GridCell/BeadPattern/Project（5文件, 482行）
-- [ ] Step 2: HamaPalette 数据
-- [ ] Step 2: PerlerPalette 数据
-- [ ] Step 2: ArtkalPalette 数据
-- [ ] Step 3: ColorUtils（RGB↔Hex，色彩距离）
-- [ ] Step 4: ColorMappingService（最近邻匹配）
-- [ ] Step 5: PaletteListPage 测试页面
-- [ ] Step 6: PaletteDetailPage 测试页面
-- [ ] 集成验证：编译通过 + 端到端测试
-- [x] PatternEditorPage 架构设计 → 已确认
-- [x] docs/PHASE1_PLAN.md 开发计划输出
-- [x] docs/DESIGN_DECISION_LOG.md 创建（7个设计决策）
-- [x] docs/PROJECT_STATUS.md 创建（项目状态总览）
-- [x] 进入 Phase 1 编码
-- [ ] PreferencesHelper 基础读写
+- [x] Step 1: Model 数据层（5 文件）
+- [x] Step 2: MARD 221 色数据接入
+- [x] Step 3: ColorUtils（RGB/XYZ/Lab/DeltaE76）
+- [x] Step 4: ColorMappingService（Lab 匹配引擎）
+- [x] Step 5: 调色板测试页面
+- [x] Step 6: 编译验证 + 文档更新
 
-### Phase 2: 图片导入功能
-- [ ] photoAccessHelper 集成
-- [ ] 图片加载与尺寸检查
-- [ ] 导入参数配置界面
-- [ ] ImageImportPage 完整实现
+---
 
-### Phase 3: 拼豆图纸生成（核心）
+## Phase 2: 图片导入功能
+
+- [ ] photoAccessHelper 相册选择集成
+- [ ] 图片加载与尺寸边界检查
+- [ ] 导入参数配置界面（网格尺寸/调色板选择）
+- [ ] ImageImportPage 完整 UI 实现
+- [ ] 编译验证
+
+---
+
+## Phase 3: 拼豆图纸生成（核心）
+
 - [ ] ImageProcessingService（缩放/像素化/采样）
-- [ ] ImageImportViewModel（转换流水线）
+- [ ] ImageImportViewModel（完整转换流水线）
 - [ ] BeadGrid Canvas 组件
 - [ ] 转换进度指示
 - [ ] 预览确认→保存流程
+- [ ] 编译验证
 
-### Phase 4: 图纸编辑器
+---
+
+## Phase 4: 图纸编辑器
+
 - [ ] EditorViewModel（工具/撤销/缩放）
-- [ ] PatternEditorPage 全屏编辑器
+- [ ] PatternEditorPage（全屏编辑器）
 - [ ] ToolBar 工具栏
-- [ ] 手势处理
+- [ ] 手势处理（点击/长按/双指缩放）
 - [ ] MaterialList 材料统计
-- [ ] ExportService
+- [ ] ExportService（PNG/JSON/CSV）
+- [ ] 编译验证
 
-### Phase 5: AI 图片创作
+---
+
+## Phase 5: AI 图片创作
+
 - [ ] AIService Provider 抽象
 - [ ] AICreateViewModel
 - [ ] AICreatePage 界面
 - [ ] StyleSelector 组件
+- [ ] 编译验证
 
-### Phase 6: 项目管理与本地存储
+---
+
+## Phase 6: 项目管理与本地存储
+
 - [ ] DatabaseHelper（RDB）
 - [ ] StorageService 完整实现
-- [ ] HomeViewModel + HomePage 完整实现
+- [ ] HomeViewModel + HomePage
 - [ ] ProjectCard / EmptyState / ConfirmDialog
+- [ ] 编译验证
 
-### Phase 7: 广场社区
+---
+
+## Phase 7: 广场社区
+
 - [ ] CommunityService
 - [ ] SquareViewModel + SquarePage（瀑布流）
-- [ ] WorkDetailPage
-- [ ] CommentItem + WorkCard
+- [ ] WorkDetailPage + CommentItem + WorkCard
 - [ ] UserProfilePage
-- [ ] 发布作品
+- [ ] 编译验证
 
-### Phase 8: 个人中心与设置
+---
+
+## Phase 8: 个人中心与设置
+
 - [ ] MinePage 完整实现
 - [ ] MyWorksPage / MyFavoritesPage
 - [ ] SettingsPage
+- [ ] 编译验证
 
-### Phase 9: 打磨与发布
+---
+
+## Phase 9: 打磨与发布优化
+
 - [ ] 全局动画优化
 - [ ] 性能优化
 - [ ] 错误处理完善
 - [ ] 无障碍适配
-- [ ] 应用商店发布
-
----
-
-## 已完成任务
-
-### Phase 0: 项目初始化与 4Tab 导航框架
-- [x] 项目基础配置
-- [x] 深浅色主题
-- [x] 字符串资源
-- [x] Constants.ets
-- [x] Index.ets 闪屏页
-- [x] MainPage.ets 4Tab 容器
-- [x] 4 个 Tab 占位页面
-- [x] 8 个路由子页占位
-- [x] main_pages.json
-- [x] 编译错误修复
-- [x] 项目规范文档
+- [ ] 发布准备
 
 ---
 
@@ -99,5 +101,5 @@
 
 | 优先级 | 问题 | 状态 |
 |--------|------|------|
-| 低 | 当前 Tab 占位页面 UI 简陋 | 功能验证通过后统一重构 |
-| 低 | SymbolGlyph 用 emoji 代替 | 后续替换为专业图标 |
+| 低 | Tab 占位页面 UI 简陋 | 各 Phase 实现时按 UI_DESIGN.md 重写 |
+| 低 | MardPalette.ets 中 @kit.LocalizationKit 未确认 | Phase 1 测试通过，待正式环境验证 |

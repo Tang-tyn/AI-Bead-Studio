@@ -9,6 +9,7 @@
     "pages/community/UserProfilePage",
     "pages/mine/MyWorksPage",
     "pages/mine/MyFavoritesPage",
-    "pages/settings/SettingsPage"
+    "pages/settings/SettingsPage",
+    "pages/test/PaletteTestPage"
   ]
 }

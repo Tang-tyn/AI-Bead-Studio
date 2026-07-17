@@ -1,5 +1,9 @@
 # PHASE1_DETAILED_DESIGN.md — Phase 1 详细设计评审
 
+> ⚠️ **DD-008 修订（2026-07-09）**：调色板方案已确认。
+> V1 采用 MARD（玛德）色号体系作为唯一标准色库。
+> 数据模型移除 `brand` 字段。详见 [DESIGN_DECISION_LOG.md §DD-008](./DESIGN_DECISION_LOG.md)
+
 > 本文档在编码前确认所有设计细节、API 选择和开发步骤。
 > 确认后严格按此文档实施，不临时变更。
 

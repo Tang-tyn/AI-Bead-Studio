@@ -135,6 +135,9 @@ export const ROUTE_MY_FAVORITES = 'pages/mine/MyFavoritesPage'
 /** 我的 - 设置页 */
 export const ROUTE_SETTINGS = 'pages/settings/SettingsPage'
 
+/** 测试页 — 调色板验证 */
+export const ROUTE_PALETTE_TEST = 'pages/test/PaletteTestPage'
+
 // ==================== 枚举类型 ====================
 // 【知识点】枚举(enum)是一种特殊的数据类型，限定变量只能取预定义的几个值。
 // 比如：主题只能是"跟随系统/浅色/深色"之一，不能是其他值。

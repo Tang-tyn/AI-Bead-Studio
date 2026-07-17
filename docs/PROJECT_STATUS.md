@@ -1,7 +1,7 @@
 # PROJECT_STATUS.md — 项目状态总览
 
-> 最后更新：2026-07-09
-> 当前阶段：Phase 1 Step 2（调色板数据）
+> 最后更新：2026-07-17
+> 当前阶段：Phase 1 已完成，等待进入 Phase 2
 
 ---
 
@@ -10,7 +10,7 @@
 ```
 Phase 0:   项目初始化与4Tab导航框架     ✅ 100%
 Phase 0.5: UI设计系统 + 文档体系建设    ✅ 100%
-Phase 1:   数据模型与调色板系统         ⏳  Step 1/6 完成
+Phase 1:   数据模型与调色板系统         ✅ 100%  (6/6 Steps)
 Phase 2:   图片导入功能                 🔴 未开始
 Phase 3:   拼豆图纸生成（核心）         🔴 未开始
 Phase 4:   图纸编辑器                   🔴 未开始
@@ -23,114 +23,81 @@ Phase 9:   打磨与发布优化               🔴 未开始
 
 ---
 
-## 二、已交付文件清单
+## 二、Phase 1 完成报告
 
-### 2.1 源代码文件（17个）
-
-```
-entry/src/main/ets/
-├── entryability/
-│   └── EntryAbility.ets                    ← 应用入口
-├── entrybackupability/
-│   └── EntryBackupAbility.ets              ← 备份扩展
-├── pages/
-│   ├── Index.ets                           ← 闪屏页
-│   ├── MainPage.ets                        ← 4Tab容器
-│   ├── home/HomePage.ets                   ← Tab 0（占位）
-│   ├── creator/CreatorPage.ets             ← Tab 1（占位）
-│   ├── creator/AICreatePage.ets            ← 子页占位
-│   ├── creator/ImageImportPage.ets         ← 子页占位
-│   ├── creator/PatternEditorPage.ets       ← 子页占位
-│   ├── community/SquarePage.ets            ← Tab 2（占位）
-│   ├── community/WorkDetailPage.ets        ← 子页占位
-│   ├── community/UserProfilePage.ets       ← 子页占位
-│   ├── mine/MinePage.ets                   ← Tab 3（占位）
-│   ├── mine/MyWorksPage.ets                ← 子页占位
-│   ├── mine/MyFavoritesPage.ets            ← 子页占位
-│   └── settings/SettingsPage.ets           ← 子页占位
-├── model/
-│   ├── BeadColor.ets                       ← NEW Phase 1 Step 1
-│   ├── ColorPalette.ets                    ← NEW Phase 1 Step 1
-│   ├── GridCell.ets                        ← NEW Phase 1 Step 1
-│   ├── BeadPattern.ets                     ← NEW Phase 1 Step 1
-│   └── Project.ets                         ← NEW Phase 1 Step 1
-└── utils/
-    └── Constants.ets                       ← 全局常量
-```
-
-### 2.2 文档文件（13个，3582行）
-
-```
-docs/
-├── PROJECT.md              ← 项目总览
-├── PROJECT_STATUS.md        ← NEW 项目状态（本文档）
-├── ARCHITECTURE.md          ← 架构设计（含已确认Tab架构）
-├── ROADMAP.md               ← 9个Phase路线图
-├── UI_DESIGN.md             ← 全局设计系统
-├── UI_PHASE0_DESIGN.md      ← 页面布局方案 + 设计约束
-├── PATTERN_EDITOR_DESIGN.md ← 编辑器架构设计
-├── DESIGN_DECISION_LOG.md   ← 7个设计决策记录
-├── DEVELOPMENT_RULES.md     ← 开发流程规范
-├── REFERENCES.md            ← 官方API索引 + 已验证/不支持API
-├── PHASE1_DETAILED_DESIGN.md← Phase 1详细设计
-├── PHASE1_PLAN.md           ← Phase 1开发计划
-├── CHANGELOG.md             ← 变更日志
-└── TODO.md                  ← 任务看板
-```
-
----
-
-## 三、Phase 1 Step 1 完成报告
-
-### 3.1 已创建文件
-
+### Step 1: Model 数据层 ✅
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| BeadColor.ets | 88 | 拼豆颜色实体。hex/rgb/lab 三格式颜色，name/nameZh 双语 |
-| ColorPalette.ets | 116 | 品牌调色板。colors[] 数组管理，getColorById/getColorCount 查询 |
-| GridCell.ets | 41 | 网格单元格。极简设计，仅 colorId 一个字段，''=空格 |
-| BeadPattern.ets | 124 | 拼豆图纸。cells[row][col] 二维数组 + createEmptyGrid 工厂 |
-| Project.ets | 113 | 用户项目。包装 BeadPattern + 来源/缩略图/状态枚举 |
-| **合计** | **482** | |
+| BeadColor.ets | 73 | 拼豆颜色（id=色号, hexColor, rgb, lab） |
+| ColorPalette.ets | 73 | 调色板（colors[], getColorById, getColorCount） |
+| GridCell.ets | 41 | 网格单元格（极简：仅 colorId） |
+| BeadPattern.ets | 124 | 拼豆图纸（cells[row][col] + createEmptyGrid） |
+| Project.ets | 113 | 项目包装（pattern + 来源 + ProjectStatus 枚举） |
 
-### 3.2 Model 层依赖关系
+### Step 2: MARD 调色板数据 ✅
+| 文件 | 说明 |
+|------|------|
+| MardPalette.ets | JSON 加载器：rawfile → BeadColor[] |
+| MardPalette.json (rawfile) | 221 色完整数据（37KB） |
 
+### Step 3: ColorUtils ✅
+| 文件 | 行数 | 能力 |
+|------|------|------|
+| ColorUtils.ets | 151 | hex↔rgb, rgb→XYZ→Lab, Delta E 76 |
+
+### Step 4: ColorMappingService ✅
+| 文件 | 行数 | 能力 |
+|------|------|------|
+| ColorMappingService.ets | 77 | Lab + Delta E 最近邻匹配引擎 |
+| MardPaletteService.ets | 93 | MARD 221 色数据服务（查询/初始化） |
+
+### Step 5: 测试页面 ✅
+| 文件 | 行数 | 能力 |
+|------|------|------|
+| PaletteTestViewModel.ets | 98 | 测试页状态管理 |
+| PaletteTestPage.ets | 308 | 221色网格 + 匹配测试 |
+
+### Step 6: 编译验证 ✅
+- JSON 正常读取
+- 221 色 Grid 正常渲染
+- Lab + Delta E 匹配正常
+
+### Phase 1 累计
 ```
-BeadColor (leaf) ← ColorPalette ← BeadPattern ← Project
-                    ↑              ↑
-                  BeadColor    GridCell (leaf)
+Model/       5 文件   424行
+Data/        1 文件    73行
+Utils/       1 文件   151行
+Service/     2 文件   170行
+ViewModel/   1 文件    98行
+Pages(test)/ 1 文件   308行
+配置          3 文件   +3行
+rawfile      1 文件   37KB
+          ───────  ─────
+总计        14 文件  1227行
 ```
-
-无循环依赖。每个文件只 import 同层或下层 Model。
-
-### 3.3 设计决策符合情况
-
-| 决策编号 | 内容 | 符合 |
-|----------|------|------|
-| DD-001 | HomePage ≠ 创作入口 | ✅ 架构已确认 |
-| DD-002 | Cell 最小化 + Canvas 渲染 | ✅ GridCell.colorId 单字段 |
-| DD-004 | 差异快照撤销 | ✅ 模型预留 |
-| DD-005 | RGB欧几里得先跑通 | ✅ BeadColor.rgb 预存 |
-| DD-007 | Tab页面不注册路由 | ✅ 已修正 main_pages.json |
 
 ---
 
-## 四、Phase 1 剩余任务
+## 三、设计决策记录
 
-| Step | 内容 | 文件 | 状态 |
-|------|------|------|------|
-| Step 1 | Model 数据层 | 5文件, 482行 | ✅ 完成 |
-| Step 2 | 调色板数据 | HamaPalette/PerlerPalette/ArtkalPalette | ⏳ 待开始 |
-| Step 3 | ColorUtils | RGB↔Hex转换 + 距离计算 | 🔴 待开始 |
-| Step 4 | ColorMappingService | 最近邻颜色匹配（单例） | 🔴 待开始 |
-| Step 5 | 测试页面 | PaletteListPage + PaletteDetailPage | 🔴 待开始 |
-| Step 6 | 集成验证 | 添加入口 + 端到端测试 | 🔴 待开始 |
+| 编号 | 内容 |
+|------|------|
+| DD-001 | HomePage ≠ 创作入口 |
+| DD-002 | Canvas 渲染优化 |
+| DD-003 | AI 大卡片设计 |
+| DD-004 | 差异快照撤销 |
+| DD-005 | V1 先 RGB 距离 → V1 Lab+DeltaE（DD-009 修订） |
+| DD-006 | AI Provider 抽象 |
+| DD-007 | Tab 页面不注册路由 |
+| DD-008 | V1 MARD 唯一品牌标准 |
+| DD-009 | Lab + Delta E 76 精准匹配 |
 
 ---
 
-## 五、下一步行动
+## 四、下一步
 
-**Phase 1 Step 2**：创建 3 个品牌调色板数据文件
-- `data/palettes/HamaPalette.ets` — Hama Midi 48色
-- `data/palettes/PerlerPalette.ets` — Perler Standard 60色
-- `data/palettes/ArtkalPalette.ets` — Artkal Standard 50色
+**Phase 2: 图片导入功能**
+- photoAccessHelper 相册选择
+- 图片加载与尺寸检查
+- 导入参数配置 UI
+- ImageImportPage 实现

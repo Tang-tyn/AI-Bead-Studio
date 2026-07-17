@@ -1,44 +1,68 @@
 # CHANGELOG.md — 变更日志
 
+## [0.2.0] — 2026-07-17
+
+### Added — Phase 1: 数据模型与调色板系统
+
+**Model 层（5 文件）**
+- BeadColor.ets — 拼豆颜色模型（id=色号, hexColor, rgb, lab）
+- ColorPalette.ets — 调色板模型（colors[], getColorById, getColorCount）
+- GridCell.ets — 网格单元格（极简：仅 colorId）
+- BeadPattern.ets — 拼豆图纸（cells[row][col] + createEmptyGrid 工厂方法）
+- Project.ets — 项目包装（pattern + 来源 + ProjectStatus 枚举）
+
+**调色板系统**
+- MardPalette.json (rawfile) — MARD 221 色完整数据（37KB）
+- MardPalette.ets — JSON 加载器
+- MardPaletteService.ets — 数据服务（查询/初始化，单例）
+
+**颜色计算引擎**
+- ColorUtils.ets — hex↔rgb, sRGB→XYZ(D65)→Lab, Delta E 76 色彩距离
+- ColorMappingService.ets — Lab + Delta E 最近邻颜色匹配引擎
+
+**测试页面**
+- PaletteTestViewModel.ets — 测试页状态管理
+- PaletteTestPage.ets — 221 色 Grid 展示 + Delta E 匹配测试
+
+**设计决策**
+- DD-008: V1 MARD 唯一品牌标准（移除多品牌支持）
+- DD-009: Lab + Delta E 76 颜色匹配（升级自 RGB 距离）
+
+### Changed
+- BeadColor.ets — 移除 brand/code 字段，id 即色号
+- ColorPalette.ets — 移除 brand 字段
+- CreatorPage.ets — 新增"MARD 色卡测试"入口按钮
+
+### Removed
+- StandardPalette.ets — 被 MardPalette.ets 替代
+
+---
+
 ## [0.1.0] — 2026-07-09
 
 ### Added — Phase 0: 项目初始化与 4Tab 导航框架
 
-- 应用基础配置（bundleName: com.example.beadstudio, version 1.0.0）
-- 浅色/深色主题颜色系统（20个语义色）
-- 中文字符串资源（30个文本资源）
-- 全局常量文件（Constants.ets）
+- 应用基础配置（bundleName: com.example.beadstudio, v1.0.0）
+- 浅色/深色主题颜色系统（20 个语义色）
+- 中文字符串资源（30 个文本资源）
+- 全局常量 Constants.ets
 - Index.ets 闪屏页（入场动画 + 自动跳转）
 - MainPage.ets 4Tab 导航容器（首页/创作/广场/我的）
-- 4个 Tab 占位页面（HomePage, CreatorPage, SquarePage, MinePage）
-- 8个路由子页占位（AICreatePage, ImageImportPage, PatternEditorPage, WorkDetailPage, UserProfilePage, MyWorksPage, MyFavoritesPage, SettingsPage）
+- 4 个 Tab 占位页面 + 8 个子页占位
 - 页面路由注册（main_pages.json）
 
 ### Fixed
-
-- Index.ets `@State opacity` 与内置属性冲突 → 重命名为 `textOpacity`
-- MainPage.ets 对象字面量类型 → 显式 `interface TabItemData`
-- 不支持的 SymbolGlyph 图标 → 替换为 Text emoji
-- `.renderMode(0)` API 移除
-- main_pages.json 移除 Tab 内嵌页面（HomePage/CreatorPage/SquarePage/MinePage）
-- 8个路由页面缺少 `@Entry` 装饰器
+- @State opacity 与内置属性冲突 → textOpacity
+- 对象字面量类型 → 显式 interface
+- 不支持的 SymbolGlyph → Text emoji
+- .renderMode(0) 移除
+- main_pages.json 移除 Tab 内嵌页面
+- 路由页面缺少 @Entry 装饰器
 
 ### Docs
-
-- 创建 CLAUDE.md 开发规范（19 个章节，438 行）
-- 创建 docs/PROJECT.md 项目总览
-- 创建 docs/ROADMAP.md 开发路线图（9 个 Phase）
-- 创建 docs/ARCHITECTURE.md 架构设计
-- 创建 docs/CHANGELOG.md 变更日志
-- 创建 docs/TODO.md 任务看板
-- 创建 docs/REFERENCES.md 官方文档索引（含已验证/不支持 API 清单）
-
-### Docs — Phase 0.5: 设计系统建设
-
-- 创建 docs/UI_DESIGN.md 专业级设计系统（8 个章节：设计理念/色彩/布局/组件/参数/动画/图标/页面方案）
-- 创建 docs/DEVELOPMENT_RULES.md 开发流程规范（7 步开发流程/禁止事项/审查清单）
-- CLAUDE.md 新增"专业级 UI 设计规范"章节（设计参数/动画/图标/适配）
-- CLAUDE.md 新增"配套文档索引"章节
-- 修正所有文档中的 `@Trace` 装饰器错误 → 统一为 ArkTS V1 状态管理（@Observed + @ObjectLink）
-- ARCHITECTURE.md 修正状态管理策略表
-- TODO.md 新增 Phase 0.5 设计阶段任务
+- CLAUDE.md（20 章节，461 行）
+- docs/PROJECT.md / ARCHITECTURE.md / ROADMAP.md
+- docs/UI_DESIGN.md / UI_PHASE0_DESIGN.md / PATTERN_EDITOR_DESIGN.md
+- docs/DESIGN_DECISION_LOG.md（9 个设计决策）
+- docs/DEVELOPMENT_RULES.md / REFERENCES.md
+- docs/PROJECT_STATUS.md / CHANGELOG.md / TODO.md

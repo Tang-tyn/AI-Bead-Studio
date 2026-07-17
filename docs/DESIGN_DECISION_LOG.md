@@ -131,6 +131,51 @@
 
 ---
 
+### DD-008: 统一使用 MARD 色号为 V1 唯一标准调色板
+
+- **日期**：2026-07-09
+- **修订**：2026-07-09（Artkal → MARD 调整）
+- **决策者**：产品经理 + 架构师
+- **推翻**：原 3 品牌方案（Hama/Perler/Artkal）
+- **背景**：V1 聚焦国内用户，MARD（玛德）是国内主流拼豆品牌。暂不考虑多品牌支持
+- **决策**：
+  - V1 采用 MARD 官方色号体系作为唯一标准色库
+  - 数据模型移除 `brand` 字段，保留扩展能力（未来通过映射层支持其他品牌）
+  - 所有模块（AI配色/编辑器/导出）统一使用 MARD 色号
+- **原因**：
+  - 聚焦 V1 国内用户需求
+  - 避免多品牌维护的复杂度
+  - 模型可扩展：未来增加品牌时不修改核心数据模型
+- **影响范围**：
+  - BeadColor.ets — 移除 `brand` 字段
+  - ColorPalette.ets — 移除 `brand` 字段
+  - Constants.ets — 移除 BRAND_* 常量
+  - data/palettes/ — 单文件 StandardPalette.ets（MARD 色号）
+
+---
+
+### DD-009: 颜色匹配升级为 Lab + Delta E 76
+
+- **日期**：2026-07-17
+- **决策者**：架构师
+- **修订**：DD-005（V1 RGB 距离 → V1 Lab + Delta E 76）
+- **背景**：MARD 221 色数据已就绪，RGB 欧几里得距离在人眼感知上不够精准
+- **决策**：
+  - V1 即采用 CIE76 Delta E（Lab 空间欧几里得距离）进行颜色匹配
+  - 算法链：sRGB → 线性化 → XYZ（D65）→ Lab → Delta E 计算
+  - 人眼感知阈值 ≈ 2.3，精度满足拼豆场景
+  - CIEDE2000 作为 Phase 9 可选升级
+- **原因**：
+  - Lab 空间更接近人眼对颜色的感知
+  - Delta E 76 实现相对简单，221 色遍历 + 实时 Lab 转换 < 2ms/像素
+  - 为后续 CIEDE2000 升级预留接口
+- **影响范围**：
+  - ColorUtils.ets — 新增 rgbToXyz/xyzToLab/rgbToLab/deltaE76
+  - ColorMappingService.ets — 匹配逻辑改为 Lab + Delta E 链
+  - MardPaletteService.ets — findNearestColor 委托给 ColorMappingService
+
+---
+
 > **日志维护规则**：
 > - 每次重大设计变更立即添加新条目
 > - 编号递增（DD-XXX）
