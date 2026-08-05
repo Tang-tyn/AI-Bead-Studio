@@ -1,16 +1,11 @@
 /**
- * CreatorPage.ets - 创作中心（AI创作 + 图片导入入口）
+ * CreatorPage.ets - 创作中心
  *
- * 【功能介绍】
- * 创作页是用户创建拼豆图纸的起点，提供两条创作路径。
- *
- * 【当前阶段】
- * Phase 0 占位，Phase 1 测试入口。
- *
- * 【注意】此组件由 MainPage 直接嵌入，不是独立路由页面，不需要 @Entry。
+ * 【职责】所有新创作流程入口（AI创作 + 图片转图纸）
+ * 【注意】MainPage 直接嵌入，不是独立路由页面
  */
 import { router } from '@kit.ArkUI'
-import { ROUTE_PALETTE_TEST } from '../../utils/Constants'
+import { ROUTE_PALETTE_TEST, ROUTE_IMAGE_IMPORT } from '../../utils/Constants'
 
 @Component
 export struct CreatorPage {
@@ -25,6 +20,7 @@ export struct CreatorPage {
         .backgroundColor($r('app.color.color_bg_primary'))
 
       Column() {
+        // AI 创作卡片（Phase 5 启用 — 暂时无跳转）
         this.buildEntryCard(
           'AI 风格创作',
           '上传照片，AI帮你生成Q版、漫画风、像素风等风格化图片',
@@ -33,10 +29,11 @@ export struct CreatorPage {
 
         Blank().height(16)
 
-        this.buildEntryCard(
+        // 照片转图纸卡片 — Phase 2 已启用
+        this.buildEntryCardWithRoute(
           '照片转图纸',
           '从相册选择照片，自动像素化并匹配拼豆颜色',
-          '（Phase 2 实现）'
+          ROUTE_IMAGE_IMPORT
         )
 
         // Phase 1 测试入口
@@ -58,8 +55,21 @@ export struct CreatorPage {
     .height('100%')
   }
 
+  /** 卡片（无点击跳转） */
   @Builder
-  buildEntryCard(title: string, desc: string, badge: string): void {
+  buildEntryCard(title: string, desc: string, badge?: string): void {
+    this.buildCardBody(title, desc, badge, '')
+  }
+
+  /** 卡片（有点击跳转） */
+  @Builder
+  buildEntryCardWithRoute(title: string, desc: string, route: string): void {
+    this.buildCardBody(title, desc, undefined, route)
+  }
+
+  /** 卡片主体 */
+  @Builder
+  buildCardBody(title: string, desc: string, badge: string | undefined, route: string): void {
     Row() {
       Column() {
         Text(title)
@@ -75,12 +85,14 @@ export struct CreatorPage {
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        Text(badge)
-          .fontSize(11)
-          .fontColor($r('app.color.color_primary'))
-          .margin({ top: 8 })
-          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-          .border({ width: 1, color: $r('app.color.color_primary'), radius: 4 })
+        if (badge !== undefined) {
+          Text(badge)
+            .fontSize(11)
+            .fontColor($r('app.color.color_primary'))
+            .margin({ top: 8 })
+            .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+            .border({ width: 1, color: $r('app.color.color_primary'), radius: 4 })
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
@@ -94,5 +106,10 @@ export struct CreatorPage {
     .backgroundColor($r('app.color.color_bg_card'))
     .borderRadius(12)
     .shadow({ radius: 8, color: '#18000000', offsetX: 0, offsetY: 2 })
+    .onClick(() => {
+      if (route !== '') {
+        router.pushUrl({ url: route })
+      }
+    })
   }
 }

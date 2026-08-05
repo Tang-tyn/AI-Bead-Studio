@@ -146,6 +146,11 @@
 | .borderRadius() | ✅ 可用 | 圆角 |
 | .shadow() | ✅ 可用 | 阴影 |
 | @Builder | ✅ 可用 | 构建函数 |
+| photoAccessHelper.PhotoViewPicker | ✅ 可用 | `@kit.MediaLibraryKit`：相册选择器 |
+| image.createImageSource | ✅ 可用 | `@kit.ImageKit`：从 URI 创建 ImageSource |
+| ImageSource.createPixelMap | ✅ 可用 | 解码为 PixelMap，支持 desiredSize 参数 |
+| fileIo.openSync | ✅ 可用 | `@kit.CoreFileKit`：打开 URI 返回 File 对象 |
+| image.createImageSource(fd) | ✅ 可用 | 接受 number(fd) 参数创建 ImageSource |
 
 ## 六、已确认不支持的 API（SDK 6.1.1 / API 24）
 
@@ -179,7 +184,7 @@
 | SymbolGlyph 官方支持列表 | 所有页面图标 | Phase 1 | 🟡 中 |
 | WaterFlow 组件 | 广场瀑布流布局 | Phase 7 | 🟢 低 |
 | LazyForEach | 大列表性能优化 | Phase 6 | 🟢 低 |
-| photoAccessHelper.PhotoViewPicker | 图片选择器 | Phase 2 | 🔴 高 |
+| photoAccessHelper.PhotoViewPicker | 图片选择器 | Phase 2 | ✅ 已验证 |
 
 **降级方案**：
 - `bindSheet()` 不可用 → 手动 Stack + translate 动画实现 Bottom Sheet
