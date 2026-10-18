@@ -1,6 +1,10 @@
 # PHASE1_PLAN.md — Phase 1 开发计划
 
 > **Phase 1 目标**：完成数据层基础 — 数据模型 + 调色板 + 颜色匹配引擎
+>
+> **历史草案说明**：本文保留最初的多品牌与 RGB 距离方案。后续已由
+> [DESIGN_DECISION_LOG.md](./DESIGN_DECISION_LOG.md) 中的 DD-008、DD-009 修订；
+> 当前实现以 MARD 221 色和 Lab + Delta E 76 为准。
 
 ---
 

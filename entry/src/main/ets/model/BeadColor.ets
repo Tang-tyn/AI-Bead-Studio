@@ -39,10 +39,7 @@ export class BeadColor {
   /** RGB 颜色值 [R, G, B]，范围 0-255。用于色彩距离计算 */
   rgb: number[]
 
-  /**
-   * CIE Lab 颜色值 [L, a, b]。
-   * V1 预置 [0,0,0]，后续升级精准匹配时填充
-   */
+  /** CIE Lab 颜色值 [L, a, b]，由调色板服务初始化时计算并缓存 */
   lab: number[]
 
   /**

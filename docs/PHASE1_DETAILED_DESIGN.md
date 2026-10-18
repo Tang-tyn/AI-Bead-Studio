@@ -1,5 +1,9 @@
 # PHASE1_DETAILED_DESIGN.md — Phase 1 详细设计评审
 
+> **历史设计说明**：本文包含最初的多品牌与 RGB 距离方案，后续已由
+> [DESIGN_DECISION_LOG.md](./DESIGN_DECISION_LOG.md) 中的 DD-008、DD-009 修订。
+> 当前实现以 MARD 221 色和 Lab + Delta E 76 为准。
+
 > ⚠️ **DD-008 修订（2026-07-09）**：调色板方案已确认。
 > V1 采用 MARD（玛德）色号体系作为唯一标准色库。
 > 数据模型移除 `brand` 字段。详见 [DESIGN_DECISION_LOG.md §DD-008](./DESIGN_DECISION_LOG.md)

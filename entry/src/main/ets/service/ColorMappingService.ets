@@ -42,14 +42,12 @@ export class ColorMappingService {
     const targetLab: number[] = rgbToLab(rgb)
     const colors: BeadColor[] = paletteService.getAllColors()
 
-    // 遍历 MARD 221 色，找 Delta E 最小的颜色
+    // 遍历 MARD 221 色，复用初始化时缓存的 Lab 值
     let nearestIndex: number = 0
     let minDeltaE: number = Number.MAX_VALUE
 
     for (let i = 0; i < colors.length; i++) {
-      // 每个调色板颜色也转换 Lab（实时计算，221 次 < 2ms）
-      const colorLab: number[] = rgbToLab(colors[i].rgb)
-      const de: number = deltaE76(targetLab, colorLab)
+      const de: number = deltaE76(targetLab, colors[i].lab)
       if (de < minDeltaE) {
         minDeltaE = de
         nearestIndex = i

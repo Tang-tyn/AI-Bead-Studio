@@ -34,6 +34,11 @@ export class ImportSession {
   private static data: ImageImportData | null = null
 
   static save(data: ImageImportData): void {
+    if (ImportSession.data !== null && ImportSession.data.pixelMap !== data.pixelMap) {
+      if (ImportSession.data.pixelMap !== null) {
+        ImportSession.releasePixelMap(ImportSession.data.pixelMap)
+      }
+    }
     ImportSession.data = data
   }
 
@@ -43,7 +48,20 @@ export class ImportSession {
     return result
   }
 
+  static clear(): void {
+    if (ImportSession.data !== null && ImportSession.data.pixelMap !== null) {
+      ImportSession.releasePixelMap(ImportSession.data.pixelMap)
+    }
+    ImportSession.data = null
+  }
+
   static hasData(): boolean {
     return ImportSession.data !== null
+  }
+
+  private static releasePixelMap(pixelMap: image.PixelMap): void {
+    pixelMap.release().catch((err: Error) => {
+      console.error('释放暂存图片资源失败: ' + err.message)
+    })
   }
 }

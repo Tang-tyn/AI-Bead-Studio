@@ -74,6 +74,8 @@
 | @ohos.multimedia.image | 图片处理 | API Reference → 媒体 → image |
 | @kit.AbilityKit | Ability 框架 | API Reference → Ability框架 |
 | @kit.ArkUI | ArkUI 框架 | API Reference → ArkUI |
+| @kit.ArkGraphics2D | 离屏 2D 绘图 | API Reference → 图形绘制 |
+| @kit.CoreFileKit | 文件 I/O 与系统文档选择器 | API Reference → 文件管理 |
 | @kit.PerformanceAnalysisKit | 性能分析 | API Reference → 性能分析 |
 
 ### 3.4 图片处理
@@ -94,7 +96,21 @@
 | 写入文件 | fileIo.write() | 保存图片/数据文件 |
 | 读取文件 | fileIo.readText() | 读取 JSON 数据 |
 | 临时目录 | context.tempDir | 临时文件 |
-| 相册保存 | photoAccessHelper.createAsset() | 保存到系统相册 |
+| 用户选择文件位置 | picker.DocumentViewPicker.save() | 由系统文档选择器授权保存 PNG |
+
+### 3.6 当前版本 PNG 导出 API（API 24）
+
+| API | 用途 | 验证状态 |
+|-----|------|----------|
+| `image.createPixelMapSync(options)` | 创建离屏绘制目标 PixelMap | SDK API 24 声明已核对；待本轮构建验证 |
+| `drawing.Canvas` / `Brush` / `Font` / `TextBlob` | 在 PixelMap 上绘制网格、行列编号、色号图例 | SDK API 24 声明已核对；待本轮构建验证 |
+| `image.createImagePacker().packToData(pixelMap, options)` | 将独立绘制结果编码为 PNG | SDK API 24 声明已核对；待本轮构建验证 |
+| `photoAccessHelper.PhotoAccessHelper.showAssetsCreationDialog(srcFileUris, photoCreationConfigs)` | 经系统图库确认界面创建图库媒体资源并返回已授权的图库 URI | SDK API 24 声明已核对；授权后仍需由应用向返回的 URI 写入 PNG 数据 |
+| `fileUri.getUriFromPath(path)` | 将应用缓存目录中的临时 PNG 路径转为图库保存 API 使用的 URI | SDK API 24 声明已核对；待本轮构建验证 |
+| `picker.DocumentViewPicker.save(options)` | 用户选择目标位置保存 PNG 的可选路径 | SDK API 24 声明已核对；无需应用自行申请图库写权限 |
+| `fileIo.openSync` / `writeSync` / `closeSync` / `unlinkSync` | 写入系统授权的图库 URI、用户选择的文档 URI，并清理应用缓存临时文件 | SDK API 24 声明已核对；图库保存写入流程待模拟器复测 |
+
+> 普通 `PhotoAccessHelper.createAsset()` 在 API 24 声明要求 `ohos.permission.WRITE_IMAGEVIDEO`；SDK 权限定义将该权限标记为 `system_basic`。默认图库保存使用系统确认 API，避免为普通用户应用申请高等级的图库写权限。系统确认返回空 URI 列表时按用户取消处理。
 
 ---
 
@@ -149,8 +165,14 @@
 | photoAccessHelper.PhotoViewPicker | ✅ 可用 | `@kit.MediaLibraryKit`：相册选择器 |
 | image.createImageSource | ✅ 可用 | `@kit.ImageKit`：从 URI 创建 ImageSource |
 | ImageSource.createPixelMap | ✅ 可用 | 解码为 PixelMap，支持 desiredSize 参数 |
+| ImageSource.getImageInfo | ✅ 可用 | `@kit.ImageKit`：获取原始图片尺寸 |
+| ImageSource.release | ✅ 可用 | `@kit.ImageKit`：释放图片源资源 |
+| PixelMap.readPixelsToBuffer | ✅ 可用 | `@kit.ImageKit`：读取小尺寸采样图像数据 |
+| PixelMap.getBytesNumberPerRow / getPixelBytesNumber | ✅ 可用 | `@kit.ImageKit`：读取像素缓冲区步长和长度 |
+| PixelMapFormat.RGBA_8888 | ✅ 可用 | 固定采样像素通道格式，供亮度分析使用 |
 | fileIo.openSync | ✅ 可用 | `@kit.CoreFileKit`：打开 URI 返回 File 对象 |
 | image.createImageSource(fd) | ✅ 可用 | 接受 number(fd) 参数创建 ImageSource |
+| Canvas / CanvasRenderingContext2D | ✅ API 24 声明已核对 | 本项目静态预览使用构造函数、onReady、width/height、fillRect、路径线条、strokeRect、onAreaChange；不代表编辑器所需的全部 Canvas API 已验证 |
 
 ## 六、已确认不支持的 API（SDK 6.1.1 / API 24）
 
@@ -198,4 +220,5 @@
 | 日期 | 更新内容 |
 |------|----------|
 | 2026-07-09 | 初始创建，整理核心开发文档和常用模块 |
+| 2026-10-18 | 核对 API 24 Canvas 静态预览所用声明 |
 | 2026-07-09 | 新增"待验证 API"章节，标注 TODO(API_VERIFY) 项 |
