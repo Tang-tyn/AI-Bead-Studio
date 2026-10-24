@@ -377,6 +377,9 @@ struct ImageImportPage {
         // 网格尺寸预设选择
         this.buildPresetSelector()
 
+        // 图纸风格选择（照片 / 线条图）
+        this.buildStyleSelector()
+
         // 操作按钮行
         Row() {
           // 重新选择（取消时保留当前图片）
@@ -432,6 +435,55 @@ struct ImageImportPage {
     }
     .width('100%')
     .layoutWeight(1)
+  }
+
+  /** 图纸风格选择器：照片（区域平均） / 线条图（众数量化色） */
+  @Builder
+  buildStyleSelector(): void {
+    Column() {
+      Text('图纸风格')
+        .fontSize(13)
+        .fontColor($r('app.color.color_text_secondary'))
+        .width('100%')
+        .margin({ bottom: 8 })
+
+      Row() {
+        Button('照片 · 过渡自然')
+          .fontSize(13)
+          .fontColor(!this.viewModel.lineArtMode
+            ? Color.White
+            : $r('app.color.color_text_primary'))
+          .backgroundColor(!this.viewModel.lineArtMode
+            ? $r('app.color.color_primary')
+            : $r('app.color.color_bg_surface'))
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+          .layoutWeight(1)
+          .onClick(() => {
+            this.viewModel.lineArtMode = false
+          })
+
+        Blank().width(12)
+
+        Button('线条图 · 轮廓清晰')
+          .fontSize(13)
+          .fontColor(this.viewModel.lineArtMode
+            ? Color.White
+            : $r('app.color.color_text_primary'))
+          .backgroundColor(this.viewModel.lineArtMode
+            ? $r('app.color.color_primary')
+            : $r('app.color.color_bg_surface'))
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+          .layoutWeight(1)
+          .onClick(() => {
+            this.viewModel.lineArtMode = true
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .margin({ bottom: 12 })
   }
 
   /** 网格预设尺寸选择器 */
@@ -500,6 +552,11 @@ struct ImageImportPage {
                   ? $r('app.color.color_primary')
                   : $r('app.color.color_text_secondary')
               )
+            // 成品尺寸提示：按标准 5mm 拼豆，1 格 = 0.5cm
+            Text(`≈ ${(preset.width * 0.5).toFixed(1)} cm`)
+              .fontSize(10)
+              .fontColor($r('app.color.color_text_hint'))
+              .margin({ top: 2 })
           }
           .width('30%')
           .padding({ top: 10, bottom: 10 })
@@ -525,6 +582,15 @@ struct ImageImportPage {
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceEvenly)
+
+      // 当前所选尺寸的成品厘米提示（预设/推荐/自定义通用）
+      Text(`成品约 ${(this.viewModel.gridWidth * 0.5).toFixed(1)} × ` +
+        `${(this.viewModel.gridHeight * 0.5).toFixed(1)} cm（按 5mm 拼豆）`)
+        .fontSize(11)
+        .fontColor($r('app.color.color_text_hint'))
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .margin({ top: 8 })
 
       Row() {
         Text('自定义宽高')

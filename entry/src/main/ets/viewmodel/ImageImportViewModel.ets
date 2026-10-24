@@ -11,7 +11,8 @@ import { ImageImportData, ImportSession } from '../utils/ImportSession'
 import {
   ImageProcessingCancellationToken,
   ImageProcessingProgressListener,
-  ImageProcessingService
+  ImageProcessingService,
+  ImageSamplingMode
 } from '../service/ImageProcessingService'
 import { MardPaletteService } from '../service/MardPaletteService'
 import { BeadPattern } from '../model/BeadPattern'
@@ -70,6 +71,8 @@ export class ImageImportViewModel {
 
   selectedPresetIndex: number = -1
   isCustomSizeSelected: boolean = false
+  /** 图纸风格：false=照片（区域平均），true=线条图（众数量化色，细线更清晰） */
+  lineArtMode: boolean = false
 
   get gridWidth(): number {
     if (this.isCustomSizeSelected) {
@@ -218,7 +221,8 @@ export class ImageImportViewModel {
       this.previewPixelMap,
       this.gridWidth,
       this.gridHeight,
-      this.selectedUri
+      this.selectedUri,
+      this.lineArtMode
     )
     this.previewPixelMap = null
     return data
@@ -284,7 +288,8 @@ export class ImageImportViewModel {
           importData.gridWidth,
           importData.gridHeight,
           token,
-          new ImageImportProgressListener(this, taskId)
+          new ImageImportProgressListener(this, taskId),
+          importData.lineArtMode ? ImageSamplingMode.LINE_ART_MODE : ImageSamplingMode.PHOTO_AVERAGE
         )
       this.validateGeneratedCells(
         generatedCells,

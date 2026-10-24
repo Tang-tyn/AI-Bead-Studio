@@ -16,17 +16,20 @@ export class ImageImportData {
   gridWidth: number
   gridHeight: number
   sourceImageUri: string
+  lineArtMode: boolean
 
   constructor(
     pixelMap: image.PixelMap | null,
     gridWidth: number,
     gridHeight: number,
-    sourceImageUri: string
+    sourceImageUri: string,
+    lineArtMode: boolean
   ) {
     this.pixelMap = pixelMap
     this.gridWidth = gridWidth
     this.gridHeight = gridHeight
     this.sourceImageUri = sourceImageUri
+    this.lineArtMode = lineArtMode
   }
 }
 
