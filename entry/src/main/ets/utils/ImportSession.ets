@@ -10,26 +10,31 @@
  * Phase 3: const data = ImportSession.consume()  // 读取后清空
  */
 import { image } from '@kit.ImageKit'
+import { CropRect } from '../model/CropRect'
 
 export class ImageImportData {
   pixelMap: image.PixelMap | null
   gridWidth: number
   gridHeight: number
   sourceImageUri: string
-  lineArtMode: boolean
+  /** 图纸风格序号（页面选择顺序）：0=照片 / 1=动漫图 / 2=线条图 */
+  styleIndex: number
+  cropRect: CropRect | null
 
   constructor(
     pixelMap: image.PixelMap | null,
     gridWidth: number,
     gridHeight: number,
     sourceImageUri: string,
-    lineArtMode: boolean
+    styleIndex: number,
+    cropRect: CropRect | null = null
   ) {
     this.pixelMap = pixelMap
     this.gridWidth = gridWidth
     this.gridHeight = gridHeight
     this.sourceImageUri = sourceImageUri
-    this.lineArtMode = lineArtMode
+    this.styleIndex = styleIndex
+    this.cropRect = cropRect
   }
 }
 

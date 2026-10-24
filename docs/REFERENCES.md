@@ -173,6 +173,8 @@
 | fileIo.openSync | ✅ 可用 | `@kit.CoreFileKit`：打开 URI 返回 File 对象 |
 | image.createImageSource(fd) | ✅ 可用 | 接受 number(fd) 参数创建 ImageSource |
 | Canvas / CanvasRenderingContext2D | ✅ API 24 声明已核对 | 本项目静态预览使用构造函数、onReady、width/height、fillRect、路径线条、strokeRect、onAreaChange；不代表编辑器所需的全部 Canvas API 已验证 |
+| PixelMap.crop(region) / cropSync(region) | ✅ 官方文档已核对（2026-10-24），待构建验证 | `@kit.ImageKit`：裁剪区域 `image.Region { x, y, size: { width, height } }`（源图像素坐标）；异步 Promise / 同步两版；无权限要求；**注意：crop 为就地修改**（原 PixelMap 被裁剪），若需保留原图须先复制 PixelMap 或改用采样偏移方案
+| PixelMap.writePixels(PositionArea) | ✅ 官方文档已核对（2026-10-24），待构建验证 | `@kit.ImageKit`（API 7+，PositionArea 含 stride）：按区域写入像素；**缓冲区字节序固定 BGRA_8888**（与 readPixels 一致，原样拷贝安全）；stride ≥ region.width×4；要求 PixelMap editable。用途：剪裁展示图（readPixels 读源图剪裁区 → 逐行紧凑重排 → createPixelMapSync 建新图 → writePixels 写入，不修改原 PixelMap）
 
 ## 六、已确认不支持的 API（SDK 6.1.1 / API 24）
 

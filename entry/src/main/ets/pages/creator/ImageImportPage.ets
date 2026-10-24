@@ -17,6 +17,7 @@ import { ImageImportViewModel } from '../../viewmodel/ImageImportViewModel'
 import { ImportSession } from '../../utils/ImportSession'
 import { BeadGrid } from '../../view/components/BeadGrid'
 import { PatternColorCount } from '../../model/PatternStatistics'
+import { CropRect } from '../../model/CropRect'
 
 /** 网格预设选项类型 */
 interface PresetOption {
@@ -25,10 +26,43 @@ interface PresetOption {
   height: number
 }
 
+/** 剪裁比例预设选项 */
+interface CropRatioOption {
+  label: string
+  /** 宽高比（宽/高）；null 表示自由比例 */
+  ratio: number | null
+}
+
+/** 剪裁框最小边长（源图像素） */
+const CROP_MIN_PX: number = 16
+/** 剪裁编辑器图片显示区高度（vp） */
+const CROP_AREA_HEIGHT: number = 360
+/** 剪裁比例预设 */
+const CROP_RATIOS: CropRatioOption[] = [
+  { label: '自由', ratio: null },
+  { label: '1:1', ratio: 1 },
+  { label: '4:3', ratio: 4 / 3 },
+  { label: '3:4', ratio: 3 / 4 }
+]
+
 @Entry
 @Component
 struct ImageImportPage {
   @State viewModel: ImageImportViewModel = new ImageImportViewModel()
+
+  // ---- 剪裁编辑器状态（剪裁框使用源图像素坐标） ----
+  @State isCropEditing: boolean = false
+  @State cropBoxX: number = 0
+  @State cropBoxY: number = 0
+  @State cropBoxW: number = 0
+  @State cropBoxH: number = 0
+  @State cropImageW: number = 0
+  @State cropImageH: number = 0
+  @State cropAreaW: number = 0
+  @State cropAreaH: number = 0
+  @State cropRatioIndex: number = 0
+  /** 手势开始时的剪裁框快照（手势更新期间以它为基准计算增量） */
+  private cropGestureStartBox: CropRect | null = null
 
   aboutToAppear(): void {
     this.viewModel.setActive(true)
@@ -43,29 +77,38 @@ struct ImageImportPage {
   }
 
   build() {
-    Column() {
-      // ---- 标题栏 ----
-      this.buildTitleBar()
+    Stack() {
+      Column() {
+        // ---- 标题栏 ----
+        this.buildTitleBar()
 
-      // ---- 内容区 ----
-      if (this.viewModel.isGenerating) {
-        this.buildGenerating()
-      } else if (this.viewModel.isLoading) {
-        this.buildLoading()
-      } else if (this.viewModel.isShowingGeneratedPreview &&
-        this.viewModel.generatedProject !== null) {
-        this.buildGenerated()
-      } else if (this.viewModel.hasImage) {
-        this.buildPreview()
-      } else if (this.viewModel.errorMsg !== '') {
-        this.buildError()
-      } else {
-        this.buildPlaceholder()
+        // ---- 内容区 ----
+        if (this.viewModel.isGenerating) {
+          this.buildGenerating()
+        } else if (this.viewModel.isLoading) {
+          this.buildLoading()
+        } else if (this.viewModel.isShowingGeneratedPreview &&
+          this.viewModel.generatedProject !== null) {
+          this.buildGenerated()
+        } else if (this.viewModel.hasImage) {
+          this.buildPreview()
+        } else if (this.viewModel.errorMsg !== '') {
+          this.buildError()
+        } else {
+          this.buildPlaceholder()
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.color_bg_primary'))
+
+      // ---- 剪裁编辑器（同页覆盖层） ----
+      if (this.isCropEditing) {
+        this.buildCropEditor()
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.color_bg_primary'))
   }
 
   /** 标题栏 */
@@ -346,23 +389,41 @@ struct ImageImportPage {
   @Builder
   buildPreview(): void {
     Column() {
-      // 图片预览
-      Scroll() {
-        Column() {
-          if (this.viewModel.previewPixelMap !== null) {
-            Image(this.viewModel.previewPixelMap)
-              .width('100%')
-              .objectFit(ImageFit.Contain)
-              .backgroundColor($r('app.color.color_bg_surface'))
-              .borderRadius(12)
+      // 图片预览（已剪裁时展示剪裁结果；生成始终基于原图 + 剪裁区域采样）
+      // 外层 Stack 让剪裁按钮悬浮在可视区域右下角，不随内容滚动
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Scroll() {
+          Column() {
+            if (this.viewModel.croppedPreviewPixelMap !== null ||
+              this.viewModel.previewPixelMap !== null) {
+              Image(this.viewModel.croppedPreviewPixelMap ?? this.viewModel.previewPixelMap)
+                .width('100%')
+                .objectFit(ImageFit.Contain)
+                .backgroundColor($r('app.color.color_bg_surface'))
+                .borderRadius(12)
+            }
           }
+          .width('100%')
+          .padding(16)
         }
         .width('100%')
-        .padding(16)
+        .height('100%')
+        .scrollable(ScrollDirection.Vertical)
+
+        // 剪裁入口（固定于可视图片区域右下角，不随滚动移动）
+        Button(this.viewModel.cropRect !== null ? '✂ 已剪裁' : '✂ 剪裁')
+          .fontSize(12)
+          .fontColor(Color.White)
+          .backgroundColor('rgba(0, 0, 0, 0.55)')
+          .borderRadius(16)
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .margin(12)
+          .onClick(() => {
+            this.openCropEditor()
+          })
       }
       .width('100%')
       .layoutWeight(1)
-      .scrollable(ScrollDirection.Vertical)
 
       // 底部配置 + 按钮区
       Column() {
@@ -437,7 +498,7 @@ struct ImageImportPage {
     .layoutWeight(1)
   }
 
-  /** 图纸风格选择器：照片（区域平均） / 线条图（众数量化色） */
+  /** 图纸风格选择器：照片（区域平均） / 动漫图（众数量化色） / 线条图（众数量化+暗线优先+色彩精简） */
   @Builder
   buildStyleSelector(): void {
     Column() {
@@ -448,39 +509,62 @@ struct ImageImportPage {
         .margin({ bottom: 8 })
 
       Row() {
-        Button('照片 · 过渡自然')
+        Button('照片')
           .fontSize(13)
-          .fontColor(!this.viewModel.lineArtMode
+          .fontColor(this.viewModel.styleIndex === 0
             ? Color.White
             : $r('app.color.color_text_primary'))
-          .backgroundColor(!this.viewModel.lineArtMode
+          .backgroundColor(this.viewModel.styleIndex === 0
             ? $r('app.color.color_primary')
             : $r('app.color.color_bg_surface'))
           .borderRadius(8)
           .padding({ left: 8, right: 8, top: 8, bottom: 8 })
           .layoutWeight(1)
           .onClick(() => {
-            this.viewModel.lineArtMode = false
+            this.viewModel.styleIndex = 0
           })
 
-        Blank().width(12)
+        Blank().width(8)
 
-        Button('线条图 · 轮廓清晰')
+        Button('动漫图')
           .fontSize(13)
-          .fontColor(this.viewModel.lineArtMode
+          .fontColor(this.viewModel.styleIndex === 1
             ? Color.White
             : $r('app.color.color_text_primary'))
-          .backgroundColor(this.viewModel.lineArtMode
+          .backgroundColor(this.viewModel.styleIndex === 1
             ? $r('app.color.color_primary')
             : $r('app.color.color_bg_surface'))
           .borderRadius(8)
           .padding({ left: 8, right: 8, top: 8, bottom: 8 })
           .layoutWeight(1)
           .onClick(() => {
-            this.viewModel.lineArtMode = true
+            this.viewModel.styleIndex = 1
+          })
+
+        Blank().width(8)
+
+        Button('线条图')
+          .fontSize(13)
+          .fontColor(this.viewModel.styleIndex === 2
+            ? Color.White
+            : $r('app.color.color_text_primary'))
+          .backgroundColor(this.viewModel.styleIndex === 2
+            ? $r('app.color.color_primary')
+            : $r('app.color.color_bg_surface'))
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+          .layoutWeight(1)
+          .onClick(() => {
+            this.viewModel.styleIndex = 2
           })
       }
       .width('100%')
+
+      Text('照片=真实照片过渡自然；动漫图=平涂色块干净、色彩全保留；线条图=白底黑线稿轮廓清晰')
+        .fontSize(10)
+        .fontColor($r('app.color.color_text_hint'))
+        .width('100%')
+        .margin({ top: 6 })
     }
     .width('100%')
     .margin({ bottom: 12 })
@@ -660,5 +744,417 @@ struct ImageImportPage {
     }
     .width('100%')
     .padding({ left: 16, right: 16, bottom: 12 })
+  }
+
+  // ==================== 剪裁编辑器 ====================
+
+  /** 剪裁编辑器覆盖层：原图 + 半透明遮罩 + 可拖动剪裁框 + 比例预设 */
+  @Builder
+  buildCropEditor(): void {
+    Column() {
+      // 标题栏
+      Row() {
+        Button('× 取消')
+          .fontSize(14)
+          .fontColor($r('app.color.color_text_primary'))
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.isCropEditing = false
+          })
+        Text('剪裁图片')
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.color_text_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+        Blank().width(64)
+      }
+      .width('100%')
+      .padding({ left: 12, right: 16, top: 48, bottom: 12 })
+
+      // 图片 + 遮罩 + 剪裁框
+      Stack() {
+        if (this.viewModel.previewPixelMap !== null) {
+          Image(this.viewModel.previewPixelMap)
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Contain)
+        }
+
+        // 四周半透明遮罩（中间镂空出剪裁框）
+        Column()
+          .backgroundColor(Color.Black)
+          .opacity(0.45)
+          .position({
+            x: this.cropOffsetX(),
+            y: this.cropOffsetY()
+          })
+          .size({
+            width: this.cropImageW * this.cropScale(),
+            height: Math.max(0, this.cropBoxY * this.cropScale())
+          })
+        Column()
+          .backgroundColor(Color.Black)
+          .opacity(0.45)
+          .position({
+            x: this.cropOffsetX(),
+            y: this.cropOffsetY() + this.cropBoxY * this.cropScale()
+          })
+          .size({
+            width: Math.max(0, this.cropBoxX * this.cropScale()),
+            height: Math.max(0, this.cropBoxH * this.cropScale())
+          })
+        Column()
+          .backgroundColor(Color.Black)
+          .opacity(0.45)
+          .position({
+            x: this.cropOffsetX() + (this.cropBoxX + this.cropBoxW) * this.cropScale(),
+            y: this.cropOffsetY() + this.cropBoxY * this.cropScale()
+          })
+          .size({
+            width: Math.max(0,
+              (this.cropImageW - this.cropBoxX - this.cropBoxW) * this.cropScale()),
+            height: Math.max(0, this.cropBoxH * this.cropScale())
+          })
+        Column()
+          .backgroundColor(Color.Black)
+          .opacity(0.45)
+          .position({
+            x: this.cropOffsetX(),
+            y: this.cropOffsetY() + (this.cropBoxY + this.cropBoxH) * this.cropScale()
+          })
+          .size({
+            width: this.cropImageW * this.cropScale(),
+            height: Math.max(0,
+              (this.cropImageH - this.cropBoxY - this.cropBoxH) * this.cropScale())
+          })
+
+        // 剪裁框（拖动整体移动）
+        Column()
+          .backgroundColor(Color.Transparent)
+          .border({ width: 2, color: Color.White })
+          .position({
+            x: this.cropOffsetX() + this.cropBoxX * this.cropScale(),
+            y: this.cropOffsetY() + this.cropBoxY * this.cropScale()
+          })
+          .size({
+            width: this.cropBoxW * this.cropScale(),
+            height: this.cropBoxH * this.cropScale()
+          })
+          .gesture(PanGesture()
+            .onActionStart(() => {
+              this.onCropGestureStart()
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.onCropMoveUpdate(event)
+            }))
+
+        // 四角拖拽手柄：0 左上 / 1 右上 / 2 左下 / 3 右下
+        Column()
+          .width(20)
+          .height(20)
+          .borderRadius(10)
+          .backgroundColor(Color.White)
+          .border({ width: 2, color: $r('app.color.color_primary') })
+          .position({
+            x: this.cropOffsetX() + this.cropBoxX * this.cropScale() - 10,
+            y: this.cropOffsetY() + this.cropBoxY * this.cropScale() - 10
+          })
+          .gesture(PanGesture()
+            .onActionStart(() => {
+              this.onCropGestureStart()
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.onCropResizeUpdate(0, event)
+            }))
+        Column()
+          .width(20)
+          .height(20)
+          .borderRadius(10)
+          .backgroundColor(Color.White)
+          .border({ width: 2, color: $r('app.color.color_primary') })
+          .position({
+            x: this.cropOffsetX() + (this.cropBoxX + this.cropBoxW) * this.cropScale() - 10,
+            y: this.cropOffsetY() + this.cropBoxY * this.cropScale() - 10
+          })
+          .gesture(PanGesture()
+            .onActionStart(() => {
+              this.onCropGestureStart()
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.onCropResizeUpdate(1, event)
+            }))
+        Column()
+          .width(20)
+          .height(20)
+          .borderRadius(10)
+          .backgroundColor(Color.White)
+          .border({ width: 2, color: $r('app.color.color_primary') })
+          .position({
+            x: this.cropOffsetX() + this.cropBoxX * this.cropScale() - 10,
+            y: this.cropOffsetY() + (this.cropBoxY + this.cropBoxH) * this.cropScale() - 10
+          })
+          .gesture(PanGesture()
+            .onActionStart(() => {
+              this.onCropGestureStart()
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.onCropResizeUpdate(2, event)
+            }))
+        Column()
+          .width(20)
+          .height(20)
+          .borderRadius(10)
+          .backgroundColor(Color.White)
+          .border({ width: 2, color: $r('app.color.color_primary') })
+          .position({
+            x: this.cropOffsetX() + (this.cropBoxX + this.cropBoxW) * this.cropScale() - 10,
+            y: this.cropOffsetY() + (this.cropBoxY + this.cropBoxH) * this.cropScale() - 10
+          })
+          .gesture(PanGesture()
+            .onActionStart(() => {
+              this.onCropGestureStart()
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.onCropResizeUpdate(3, event)
+            }))
+      }
+      .width('100%')
+      .height(CROP_AREA_HEIGHT)
+      .backgroundColor($r('app.color.color_bg_surface'))
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.cropAreaW = Number(newArea.width)
+        this.cropAreaH = Number(newArea.height)
+      })
+
+      // 比例预设
+      Row() {
+        ForEach(CROP_RATIOS, (option: CropRatioOption, index: number) => {
+          Button(option.label)
+            .fontSize(13)
+            .fontColor(this.cropRatioIndex === index
+              ? Color.White
+              : $r('app.color.color_text_primary'))
+            .backgroundColor(this.cropRatioIndex === index
+              ? $r('app.color.color_primary')
+              : $r('app.color.color_bg_surface'))
+            .borderRadius(8)
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .onClick(() => {
+              this.cropApplyRatio(index)
+            })
+        }, (option: CropRatioOption) => option.label)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .margin({ top: 16 })
+
+      Blank()
+
+      // 底部操作
+      Row() {
+        Button('重置')
+          .fontSize(15)
+          .fontColor($r('app.color.color_primary'))
+          .backgroundColor($r('app.color.color_bg_card'))
+          .border({ width: 1, color: $r('app.color.color_primary'), radius: 8 })
+          .layoutWeight(1)
+          .onClick(() => {
+            this.cropResetBox()
+          })
+        Blank().width(16)
+        Button('✓ 完成剪裁')
+          .fontSize(15)
+          .fontColor(Color.White)
+          .backgroundColor($r('app.color.color_primary'))
+          .borderRadius(8)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.confirmCrop()
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 24 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.color_bg_primary'))
+  }
+
+  /** 显示区缩放系数：源图像素 → 显示 vp */
+  private cropScale(): number {
+    if (this.cropImageW <= 0 || this.cropImageH <= 0 ||
+      this.cropAreaW <= 0 || this.cropAreaH <= 0) {
+      return 0
+    }
+    return Math.min(this.cropAreaW / this.cropImageW, this.cropAreaH / this.cropImageH)
+  }
+
+  /** 显示区内图片左上角的横向偏移（vp，Contain 留白） */
+  private cropOffsetX(): number {
+    return (this.cropAreaW - this.cropImageW * this.cropScale()) / 2
+  }
+
+  /** 显示区内图片左上角的纵向偏移（vp，Contain 留白） */
+  private cropOffsetY(): number {
+    return (this.cropAreaH - this.cropImageH * this.cropScale()) / 2
+  }
+
+  /** 打开剪裁编辑器：读取图片尺寸，按已有剪裁或整图初始化剪裁框 */
+  private async openCropEditor(): Promise<void> {
+    const pixelMap = this.viewModel.previewPixelMap
+    if (pixelMap === null) {
+      return
+    }
+    let imageWidth: number = 0
+    let imageHeight: number = 0
+    try {
+      const info = await pixelMap.getImageInfo()
+      imageWidth = info.size.width
+      imageHeight = info.size.height
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '未知错误'
+      this.viewModel.errorMsg = '读取图片尺寸失败：' + message
+      return
+    }
+    if (imageWidth < 1 || imageHeight < 1) {
+      return
+    }
+    this.cropImageW = imageWidth
+    this.cropImageH = imageHeight
+    const existing: CropRect | null = this.viewModel.cropRect
+    if (existing !== null) {
+      this.cropBoxX = existing.x
+      this.cropBoxY = existing.y
+      this.cropBoxW = existing.width
+      this.cropBoxH = existing.height
+    } else {
+      this.cropBoxX = 0
+      this.cropBoxY = 0
+      this.cropBoxW = imageWidth
+      this.cropBoxH = imageHeight
+    }
+    this.isCropEditing = true
+  }
+
+  /** 确认剪裁：取整并写回 ViewModel，刷新剪裁展示图，关闭编辑器 */
+  private confirmCrop(): void {
+    const x: number = Math.max(0, Math.round(this.cropBoxX))
+    const y: number = Math.max(0, Math.round(this.cropBoxY))
+    const width: number = Math.max(1, Math.round(this.cropBoxW))
+    const height: number = Math.max(1, Math.round(this.cropBoxH))
+
+    // 框选即整图时视为未剪裁，预览回退原图
+    if (x <= 0 && y <= 0 && width >= this.cropImageW && height >= this.cropImageH) {
+      this.viewModel.cropRect = null
+      this.viewModel.refreshCroppedPreview()
+      this.isCropEditing = false
+      return
+    }
+
+    const clampedX: number = Math.min(x, this.cropImageW - 1)
+    const clampedY: number = Math.min(y, this.cropImageH - 1)
+    this.viewModel.cropRect = new CropRect(
+      clampedX,
+      clampedY,
+      Math.min(width, this.cropImageW - clampedX),
+      Math.min(height, this.cropImageH - clampedY)
+    )
+    this.viewModel.refreshCroppedPreview()
+    this.isCropEditing = false
+  }
+
+  /** 重置剪裁框为整张图 */
+  private cropResetBox(): void {
+    this.cropBoxX = 0
+    this.cropBoxY = 0
+    this.cropBoxW = this.cropImageW
+    this.cropBoxH = this.cropImageH
+    this.cropRatioIndex = 0
+  }
+
+  /** 应用比例预设：按比例收缩当前剪裁框（中心不变，只缩不放大） */
+  private cropApplyRatio(index: number): void {
+    this.cropRatioIndex = index
+    const ratio: number | null = CROP_RATIOS[index].ratio
+    if (ratio === null) {
+      return
+    }
+    const centerX: number = this.cropBoxX + this.cropBoxW / 2
+    const centerY: number = this.cropBoxY + this.cropBoxH / 2
+    let newWidth: number = this.cropBoxW
+    let newHeight: number = newWidth / ratio
+    if (newHeight > this.cropBoxH) {
+      newHeight = this.cropBoxH
+      newWidth = newHeight * ratio
+    }
+    this.cropBoxX = Math.max(0, centerX - newWidth / 2)
+    this.cropBoxY = Math.max(0, centerY - newHeight / 2)
+    this.cropBoxW = newWidth
+    this.cropBoxH = newHeight
+  }
+
+  /** 手势开始：记录剪裁框快照 */
+  private onCropGestureStart(): void {
+    this.cropGestureStartBox = new CropRect(
+      this.cropBoxX, this.cropBoxY, this.cropBoxW, this.cropBoxH)
+  }
+
+  /** 整体拖动：平移剪裁框（钳制在图片范围内） */
+  private onCropMoveUpdate(event: GestureEvent): void {
+    const start: CropRect | null = this.cropGestureStartBox
+    const scale: number = this.cropScale()
+    if (start === null || scale <= 0) {
+      return
+    }
+    const deltaX: number = event.offsetX / scale
+    const deltaY: number = event.offsetY / scale
+    this.cropBoxX = Math.min(
+      this.cropImageW - start.width, Math.max(0, start.x + deltaX))
+    this.cropBoxY = Math.min(
+      this.cropImageH - start.height, Math.max(0, start.y + deltaY))
+  }
+
+  /**
+   * 角点拖拽：0 左上 / 1 右上 / 2 左下 / 3 右下。
+   * 对角固定为锚点，拖动角在图片范围内移动；锁定比例时按比例换算另一维。
+   */
+  private onCropResizeUpdate(corner: number, event: GestureEvent): void {
+    const start: CropRect | null = this.cropGestureStartBox
+    const scale: number = this.cropScale()
+    if (start === null || scale <= 0) {
+      return
+    }
+    const deltaX: number = event.offsetX / scale
+    const deltaY: number = event.offsetY / scale
+    const anchorRight: boolean = corner === 0 || corner === 2
+    const anchorBottom: boolean = corner === 0 || corner === 1
+    const anchorX: number = anchorRight ? start.x + start.width : start.x
+    const anchorY: number = anchorBottom ? start.y + start.height : start.y
+    let movingX: number = anchorRight ? start.x + deltaX : start.x + start.width + deltaX
+    let movingY: number = anchorBottom ? start.y + deltaY : start.y + start.height + deltaY
+    movingX = Math.min(this.cropImageW, Math.max(0, movingX))
+    movingY = Math.min(this.cropImageH, Math.max(0, movingY))
+
+    let newWidth: number = Math.abs(movingX - anchorX)
+    let newHeight: number = Math.abs(movingY - anchorY)
+    const ratio: number | null = CROP_RATIOS[this.cropRatioIndex].ratio
+    if (ratio !== null) {
+      const maxWidth: number = anchorRight ? anchorX : this.cropImageW - anchorX
+      const maxHeight: number = anchorBottom ? anchorY : this.cropImageH - anchorY
+      newWidth = Math.min(newWidth, maxWidth)
+      newHeight = newWidth / ratio
+      if (newHeight > maxHeight) {
+        newHeight = maxHeight
+        newWidth = newHeight * ratio
+      }
+    }
+    if (newWidth < CROP_MIN_PX || newHeight < CROP_MIN_PX) {
+      return
+    }
+    this.cropBoxX = anchorRight ? anchorX - newWidth : anchorX
+    this.cropBoxY = anchorBottom ? anchorY - newHeight : anchorY
+    this.cropBoxW = newWidth
+    this.cropBoxH = newHeight
   }
 }

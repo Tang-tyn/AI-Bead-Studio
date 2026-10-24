@@ -3,6 +3,7 @@
  */
 import { image } from '@kit.ImageKit'
 import { GridCell } from '../model/GridCell'
+import { CropRect } from '../model/CropRect'
 import { BeadColor } from '../model/BeadColor'
 import { GRID_MAX_SIZE, GRID_MIN_SIZE, IMAGE_MAX_HEIGHT, IMAGE_MAX_WIDTH } from '../utils/Constants'
 import { ColorMappingService } from './ColorMappingService'
@@ -13,11 +14,13 @@ const MARD_PALETTE_COLOR_COUNT: number = 221
 /**
  * 采样模式：
  * - PHOTO_AVERAGE：区域像素平均（照片类图片颜色过渡自然）
- * - LINE_ART_MODE：区域内占多数的量化色平均（线条图细线不会被白底冲淡）
+ * - LINE_ART_MODE：区域内占多数的量化色平均 + 暗线优先 + 色彩精简（白底黑线稿细线清晰）
+ * - ANIME_MODE：区域内占多数的量化色平均，无暗线优先、无色彩精简（平涂动漫图色块干净、少数色保留）
  */
 export enum ImageSamplingMode {
   PHOTO_AVERAGE = 0,
-  LINE_ART_MODE = 1
+  LINE_ART_MODE = 1,
+  ANIME_MODE = 2
 }
 
 const LINE_ART_TRIM_WHITE_MIN: number = 240
@@ -127,6 +130,7 @@ export class ImageProcessingService {
    * @param cancellationToken 可取消令牌；不需要取消时传入 null
    * @param progressListener 进度监听器；不需要进度时传入 null
    * @param samplingMode 采样模式；线条图模式取区域众数量化色，避免细线被平均成灰色
+   * @param cropRect 剪裁区域（源图像素坐标）；null 表示整张图。仅作采样偏移，不修改原 PixelMap
    * @returns 按 [row][col] 排列且每格存储 MARD 色号的图纸网格
    */
   async generateGridCells(
@@ -135,7 +139,8 @@ export class ImageProcessingService {
     gridHeight: number,
     cancellationToken: ImageProcessingCancellationToken | null,
     progressListener: ImageProcessingProgressListener | null,
-    samplingMode: ImageSamplingMode = ImageSamplingMode.PHOTO_AVERAGE
+    samplingMode: ImageSamplingMode = ImageSamplingMode.PHOTO_AVERAGE,
+    cropRect: CropRect | null = null
   ): Promise<GridCell[][]> {
     if (pixelMap === null) {
       throw new Error('待转换的 PixelMap 为空')
@@ -178,18 +183,37 @@ export class ImageProcessingService {
     }
 
     const useLineArtMode: boolean = samplingMode === ImageSamplingMode.LINE_ART_MODE
+    // 众数量化桶采样：线条图与动漫图共用（动漫图不做暗线优先、不精简色彩）
+    const useBucketSampling: boolean = samplingMode !== ImageSamplingMode.PHOTO_AVERAGE
     const maximumRegionRows: number = Math.max(1, Math.ceil(imageHeight / gridHeight))
 
-    // 扫描内容边界框，裁掉四周纯白/透明边，让主体占满格子（两种模式通用）
-    let contentMinX: number = 0
-    let contentMinY: number = 0
-    let contentWidth: number = imageWidth
-    let contentHeight: number = imageHeight
+    // 剪裁区域：钳制到图片范围（源图像素坐标）；null 表示整张图。
+    // 只约束采样与扫描范围，原 PixelMap 保持完整（"返回重新生成"依赖完整原图）
+    let cropX: number = 0
+    let cropY: number = 0
+    let cropWidth: number = imageWidth
+    let cropHeight: number = imageHeight
+    if (cropRect !== null) {
+      if (!CropRect.isValid(cropRect.x, cropRect.y, cropRect.width, cropRect.height)) {
+        throw new Error('剪裁区域无效，无法生成图纸')
+      }
+      cropX = Math.min(imageWidth - 1, Math.max(0, cropRect.x))
+      cropY = Math.min(imageHeight - 1, Math.max(0, cropRect.y))
+      cropWidth = Math.min(imageWidth - cropX, cropRect.width)
+      cropHeight = Math.min(imageHeight - cropY, cropRect.height)
+    }
+
+    // 扫描内容边界框，裁掉四周纯白/透明边，让主体占满格子（两种模式通用；扫描限定在剪裁区域内）
+    let contentMinX: number = cropX
+    let contentMinY: number = cropY
+    let contentWidth: number = cropWidth
+    let contentHeight: number = cropHeight
     const bounds: ContentBounds | null =
-      await this.findContentBounds(actualPixelMap, imageInfo, imageWidth, imageHeight)
+      await this.findContentBounds(
+        actualPixelMap, imageInfo, imageWidth, imageHeight, cropX, cropY, cropWidth, cropHeight)
     if (bounds === null) {
-      if (useLineArtMode) {
-        throw new Error('未检测到图片内容（整张图接近纯白），无法生成线条图图纸')
+      if (useBucketSampling) {
+        throw new Error('未检测到图片内容（整张图接近纯白），无法生成图纸')
       }
     } else {
       contentMinX = bounds.minX
@@ -289,9 +313,9 @@ export class ImageProcessingService {
         let greenTotal: number = 0
         let blueTotal: number = 0
         let sampleCount: number = 0
-        // 线条图模式：按 16 级/通道量化统计区域众数桶（复用 Map 减少分配）
+        // 众数量化桶采样（线条图/动漫图）：按 16 级/通道量化统计区域众数桶（复用 Map 减少分配）
         let bucketStats: Map<number, number[]> | null = null
-        if (useLineArtMode) {
+        if (useBucketSampling) {
           bucketStats = this.regionBucketStats
           bucketStats.clear()
         }
@@ -387,9 +411,11 @@ export class ImageProcessingService {
             }
           })
           if (bestCount === 0) {
-            throw new Error(`线条图模式采样区域统计为空（${row}, ${col}）`)
+            throw new Error(`采样区域统计为空（${row}, ${col}）`)
           }
-          if (darkCount > 0) {
+          // 暗线优先仅线条图模式：亮度<35 的暗桶占比≥10% 时整格选暗，保细线连通；
+          // 动漫图模式不做暗线优先，避免蓝眼睛/浅阴影等柔和色被拖暗
+          if (darkCount > 0 && useLineArtMode) {
             matchRgb = [
               Math.round(darkRedTotal / darkCount),
               Math.round(darkGreenTotal / darkCount),
@@ -440,13 +466,21 @@ export class ImageProcessingService {
    * @param imageInfo 图片信息（Alpha 类型判定用）
    * @param imageWidth 图片宽（像素）
    * @param imageHeight 图片高（像素）
-   * @returns 内容边界框；整张图无内容时返回 null
+   * @param scanX 扫描区域左上角横坐标（像素，剪裁偏移）
+   * @param scanY 扫描区域左上角纵坐标（像素，剪裁偏移）
+   * @param scanWidth 扫描区域宽（像素）
+   * @param scanHeight 扫描区域高（像素）
+   * @returns 内容边界框；扫描区域内无内容时返回 null
    */
   private async findContentBounds(
     pixelMap: image.PixelMap,
     imageInfo: image.ImageInfo,
     imageWidth: number,
-    imageHeight: number
+    imageHeight: number,
+    scanX: number,
+    scanY: number,
+    scanWidth: number,
+    scanHeight: number
   ): Promise<ContentBounds | null> {
     const rowStride: number = pixelMap.getBytesNumberPerRow()
     const bandRows: number = Math.min(TRIM_SCAN_BAND_ROWS, imageHeight)
@@ -454,20 +488,21 @@ export class ImageProcessingService {
     const bytes: Uint8Array = new Uint8Array(buffer)
     // 行/列投影计数：一行/列的非白像素达到阈值才算内容，过滤零星 JPEG 噪点
     // 阈值在扫描结束后按投影峰值自适应计算（见下方），此处不预设
+    // 投影数组保持全图尺寸（下标即全图坐标），仅扫描范围限定在剪裁区域内
     const rowCount: Int32Array = new Int32Array(imageHeight)
     const colCount: Int32Array = new Int32Array(imageWidth)
 
-    for (let bandStart: number = 0; bandStart < imageHeight; bandStart += bandRows) {
-      const bandHeight: number = Math.min(bandRows, imageHeight - bandStart)
+    for (let bandStart: number = scanY; bandStart < scanY + scanHeight; bandStart += bandRows) {
+      const bandHeight: number = Math.min(bandRows, scanY + scanHeight - bandStart)
       const area: image.PositionArea = {
         pixels: buffer,
         offset: 0,
         stride: rowStride,
         region: {
-          x: 0,
+          x: scanX,
           y: bandStart,
           size: {
-            width: imageWidth,
+            width: scanWidth,
             height: bandHeight
           }
         }
@@ -481,8 +516,10 @@ export class ImageProcessingService {
 
       for (let localRow: number = 0; localRow < bandHeight; localRow++) {
         const rowBase: number = localRow * rowStride
-        for (let col: number = 0; col < imageWidth; col++) {
-          const offset: number = rowBase + col * 4
+        for (let col: number = scanX; col < scanX + scanWidth; col++) {
+          // readPixels 的 region.x=scanX 表示源图起始列，但缓冲区数据从 0 开始摆放，
+          // 因此缓冲区下标必须用剪裁区域内的相对列号，否则剪裁框不贴左边缘时右侧内容全部丢失
+          const offset: number = rowBase + (col - scanX) * 4
           const alpha: number = imageInfo.alphaType === image.AlphaType.OPAQUE
             ? 255 : bytes[offset + 3]
           if (alpha <= LINE_ART_ALPHA_MIN) {

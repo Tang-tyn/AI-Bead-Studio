@@ -3,6 +3,8 @@
 ## [Unreleased] — 2026-10-24
 
 ### Added
+- 图片剪裁功能（轻量版，✅ 2026-10-24 模拟器验证通过）：CropRect 数据模型 + ImageImportData/ViewModel/Service 全链路采样偏移（不调 PixelMap.crop，原图不动）；同页覆盖层剪裁编辑器（框内拖动移动、四角手柄缩放、比例预设 自由/1:1/4:3/3:4、边界钳制最小 16px）；剪裁后预览图替换为剪裁结果（readPixels→重排→createPixelMapSync+writePixels 生成展示副本，原 PixelMap 不动）；入口按钮固定于可视图片区域右下角不随滚动；重新选图/重置自动清空。修复 findContentBounds 缓冲区相对列号 bug（剪裁区域 scanX>0 时右半内容丢失）
+- 「动漫图」图纸风格（第三档）：ImageSamplingMode.ANIME_MODE——众数量化桶采样（与线条图共用）但无暗线优先、无色彩精简，适配二次元赛璐璐平涂图（保留橙色兜帽/蓝眼睛等少数色）；风格由 boolean 改为 styleIndex 三档（0=照片/1=动漫图/2=线条图）
 - 线条图模式（图纸风格切换，默认照片模式不变）：ImageProcessingService 新增 ImageSamplingMode 枚举与众数量化桶采样（16 级/通道）+ 暗线优先（亮度<35、占比≥10%）+ 自动裁白边（行/列投影自适应阈值，取峰值 5%）+ 内容框宽高比适配（短维居中留白填白格，总格数不变）+ 色彩精简（保留前 6 主色归并）；ImportSession/ViewModel/Page 全链路传参。经五轮迭代（含暗部膨胀方案试做并回滚）后冻结，29×29 残留细节问题归入编辑器阶段
 - 成品尺寸厘米提示：预设按钮 ≈X cm 小字 + 动态「成品约 X × Y cm（按 5mm 拼豆）」
 - docs/TODO.md — 新增「增强：图片剪裁（轻量版）」排期条目（Phase 3 收尾后、Phase 6 之前）：固定比例预设 + 可拖动剪裁框，剪裁区域作为采样偏移传入 ImageProcessingService，不动核心映射算法

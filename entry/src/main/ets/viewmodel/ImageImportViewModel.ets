@@ -8,6 +8,7 @@ import {
 } from '../service/ImagePickerService'
 import { image } from '@kit.ImageKit'
 import { ImageImportData, ImportSession } from '../utils/ImportSession'
+import { CropRect } from '../model/CropRect'
 import {
   ImageProcessingCancellationToken,
   ImageProcessingProgressListener,
@@ -71,8 +72,12 @@ export class ImageImportViewModel {
 
   selectedPresetIndex: number = -1
   isCustomSizeSelected: boolean = false
-  /** 图纸风格：false=照片（区域平均），true=线条图（众数量化色，细线更清晰） */
-  lineArtMode: boolean = false
+  /** 图纸风格序号（页面选择顺序）：0=照片（区域平均）/ 1=动漫图（众数量化色）/ 2=线条图（众数量化+暗线优先+色彩精简） */
+  styleIndex: number = 0
+  /** 剪裁区域（源图像素坐标）；null 表示未剪裁，使用整张图 */
+  cropRect: CropRect | null = null
+  /** 剪裁后的展示图（仅用于预览显示；生成始终用原图 + cropRect 采样，原 PixelMap 不动） */
+  croppedPreviewPixelMap: image.PixelMap | null = null
 
   get gridWidth(): number {
     if (this.isCustomSizeSelected) {
@@ -171,6 +176,8 @@ export class ImageImportViewModel {
       this.selectedUri = uri
       this.recommendation = loadResult.recommendation
       this.recommendationError = loadResult.recommendationError
+      this.cropRect = null
+      this.releaseCroppedPreview()
       this.selectedPresetIndex = -1
       this.isCustomSizeSelected = false
       if (loadResult.recommendation !== null) {
@@ -222,7 +229,8 @@ export class ImageImportViewModel {
       this.gridWidth,
       this.gridHeight,
       this.selectedUri,
-      this.lineArtMode
+      this.styleIndex,
+      this.cropRect
     )
     this.previewPixelMap = null
     return data
@@ -289,7 +297,8 @@ export class ImageImportViewModel {
           importData.gridHeight,
           token,
           new ImageImportProgressListener(this, taskId),
-          importData.lineArtMode ? ImageSamplingMode.LINE_ART_MODE : ImageSamplingMode.PHOTO_AVERAGE
+          this.styleToSamplingMode(importData.styleIndex),
+          importData.cropRect
         )
       this.validateGeneratedCells(
         generatedCells,
@@ -455,6 +464,8 @@ export class ImageImportViewModel {
     }
     this.selectedUri = ''
     this.previewPixelMap = null
+    this.cropRect = null
+    this.releaseCroppedPreview()
     this.recommendation = null
     this.recommendationError = ''
     this.customGridWidthText = ''
@@ -500,6 +511,93 @@ export class ImageImportViewModel {
     }
     this.activeGenerationTaskId = ++this.generationTaskSequence
     this.isGenerating = false
+  }
+
+  /**
+   * 根据当前 cropRect 生成剪裁后的展示图（仅用于预览显示，不修改原 PixelMap）。
+   * cropRect 为 null 时清空展示图，预览回退显示原图。
+   */
+  async refreshCroppedPreview(): Promise<void> {
+    const source: image.PixelMap | null = this.previewPixelMap
+    const crop: CropRect | null = this.cropRect
+    if (source === null || crop === null) {
+      this.releaseCroppedPreview()
+      return
+    }
+    try {
+      const info = await source.getImageInfo()
+      const sourceWidth: number = info.size.width
+      const sourceHeight: number = info.size.height
+      // 防御性钳制（confirmCrop 写入时已钳制过）
+      const cropX: number = Math.min(Math.max(0, crop.x), sourceWidth - 1)
+      const cropY: number = Math.min(Math.max(0, crop.y), sourceHeight - 1)
+      const cropWidth: number = Math.min(crop.width, sourceWidth - cropX)
+      const cropHeight: number = Math.min(crop.height, sourceHeight - cropY)
+      const sourceStride: number = source.getBytesNumberPerRow()
+      const stagedBuffer: ArrayBuffer = new ArrayBuffer(sourceStride * cropHeight)
+      const readArea: image.PositionArea = {
+        pixels: stagedBuffer,
+        offset: 0,
+        stride: sourceStride,
+        region: { x: cropX, y: cropY, size: { width: cropWidth, height: cropHeight } }
+      }
+      await source.readPixels(readArea)
+
+      // writePixels 需要逐行紧凑排列（stride 可为 cropWidth*4），而读取缓冲区按源图跨距摆放，逐行拷贝
+      const tightBuffer: ArrayBuffer = new ArrayBuffer(cropWidth * cropHeight * 4)
+      const stagedBytes: Uint8Array = new Uint8Array(stagedBuffer)
+      const tightBytes: Uint8Array = new Uint8Array(tightBuffer)
+      for (let row: number = 0; row < cropHeight; row++) {
+        const from: number = row * sourceStride
+        const to: number = row * cropWidth * 4
+        for (let i: number = 0; i < cropWidth * 4; i++) {
+          tightBytes[to + i] = stagedBytes[from + i]
+        }
+      }
+
+      const cropped: image.PixelMap = image.createPixelMapSync({
+        size: { width: cropWidth, height: cropHeight },
+        pixelFormat: image.PixelMapFormat.BGRA_8888,
+        alphaType: info.alphaType,
+        editable: true
+      })
+      const writeArea: image.PositionArea = {
+        pixels: tightBuffer,
+        offset: 0,
+        stride: cropWidth * 4,
+        region: { x: 0, y: 0, size: { width: cropWidth, height: cropHeight } }
+      }
+      await cropped.writePixels(writeArea)
+
+      const previous: image.PixelMap | null = this.croppedPreviewPixelMap
+      this.croppedPreviewPixelMap = cropped
+      if (previous !== null) {
+        this.releasePixelMap(previous)
+      }
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '未知错误'
+      this.errorMsg = '生成剪裁预览失败：' + message
+    }
+  }
+
+  /** 释放并清空剪裁展示图 */
+  releaseCroppedPreview(): void {
+    const previous: image.PixelMap | null = this.croppedPreviewPixelMap
+    this.croppedPreviewPixelMap = null
+    if (previous !== null) {
+      this.releasePixelMap(previous)
+    }
+  }
+
+  /** 图纸风格序号 → 采样模式（顺序与页面按钮一致） */
+  private styleToSamplingMode(styleIndex: number): ImageSamplingMode {
+    if (styleIndex === 1) {
+      return ImageSamplingMode.ANIME_MODE
+    }
+    if (styleIndex === 2) {
+      return ImageSamplingMode.LINE_ART_MODE
+    }
+    return ImageSamplingMode.PHOTO_AVERAGE
   }
 
   private releasePixelMap(pixelMap: image.PixelMap): void {
