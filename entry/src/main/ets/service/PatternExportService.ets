@@ -12,6 +12,8 @@ import { GridCell } from '../model/GridCell'
 import { GRID_MAX_SIZE, GRID_MIN_SIZE } from '../utils/Constants'
 
 const CELL_PIXEL_SIZE: number = 10
+/** 空格（异形拼豆留空）填充色：浅灰底，与 H1 白豆区分（与 BeadGrid 预览一致） */
+const EMPTY_CELL_FILL_COLOR: string = '#EFEFEF'
 const PAGE_MARGIN: number = 28
 const GRID_LEFT_MARGIN: number = 52
 const HEADER_HEIGHT: number = 108
@@ -311,14 +313,13 @@ export class PatternExportService {
     for (let row: number = 0; row < pattern.gridHeight; row++) {
       const rowCells: GridCell[] | undefined = pattern.cells[row]
       if (rowCells === undefined) {
-        this.setBrushBlendMode(canvas, brush, drawing.BlendMode.CLEAR)
+        this.setBrushColor(canvas, brush, EMPTY_CELL_FILL_COLOR)
         canvas.drawRect(
           exportLayout.gridLeft,
           exportLayout.gridTop + row * CELL_PIXEL_SIZE,
           exportLayout.gridLeft + exportLayout.gridPixelWidth,
           exportLayout.gridTop + (row + 1) * CELL_PIXEL_SIZE
         )
-        this.setBrushBlendMode(canvas, brush, drawing.BlendMode.SRC_OVER)
         continue
       }
       let col: number = 0
@@ -337,14 +338,13 @@ export class PatternExportService {
             }
             emptyRunEnd++
           }
-          this.setBrushBlendMode(canvas, brush, drawing.BlendMode.CLEAR)
+          this.setBrushColor(canvas, brush, EMPTY_CELL_FILL_COLOR)
           canvas.drawRect(
             exportLayout.gridLeft + col * CELL_PIXEL_SIZE,
             exportLayout.gridTop + row * CELL_PIXEL_SIZE,
             exportLayout.gridLeft + emptyRunEnd * CELL_PIXEL_SIZE,
             exportLayout.gridTop + (row + 1) * CELL_PIXEL_SIZE
           )
-          this.setBrushBlendMode(canvas, brush, drawing.BlendMode.SRC_OVER)
           col = emptyRunEnd
           continue
         }

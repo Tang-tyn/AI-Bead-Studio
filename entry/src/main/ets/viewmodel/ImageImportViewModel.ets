@@ -78,6 +78,10 @@ export class ImageImportViewModel {
   cropRect: CropRect | null = null
   /** 剪裁后的展示图（仅用于预览显示；生成始终用原图 + cropRect 采样，原 PixelMap 不动） */
   croppedPreviewPixelMap: image.PixelMap | null = null
+  /** 透明→空格开关：true 时透明占比过半的格子留空（异形拼豆），仅图片含透明区域时可用 */
+  transparentAsEmpty: boolean = false
+  /** 当前图片是否含透明通道（alphaType 非 OPAQUE）；仅用于区分提示文案（透明挖空 / 白底泛洪） */
+  imageHasAlpha: boolean = false
 
   get gridWidth(): number {
     if (this.isCustomSizeSelected) {
@@ -178,6 +182,10 @@ export class ImageImportViewModel {
       this.recommendationError = loadResult.recommendationError
       this.cropRect = null
       this.releaseCroppedPreview()
+      // 检测透明通道：决定「透明区域」开关是否可用；换图后开关恢复默认白底
+      const loadedInfo = await loadResult.pixelMap.getImageInfo()
+      this.imageHasAlpha = loadedInfo.alphaType !== image.AlphaType.OPAQUE
+      this.transparentAsEmpty = false
       this.selectedPresetIndex = -1
       this.isCustomSizeSelected = false
       if (loadResult.recommendation !== null) {
@@ -230,7 +238,8 @@ export class ImageImportViewModel {
       this.gridHeight,
       this.selectedUri,
       this.styleIndex,
-      this.cropRect
+      this.cropRect,
+      this.transparentAsEmpty
     )
     this.previewPixelMap = null
     return data
@@ -298,7 +307,8 @@ export class ImageImportViewModel {
           token,
           new ImageImportProgressListener(this, taskId),
           this.styleToSamplingMode(importData.styleIndex),
-          importData.cropRect
+          importData.cropRect,
+          importData.transparentAsEmpty
         )
       this.validateGeneratedCells(
         generatedCells,
@@ -466,6 +476,8 @@ export class ImageImportViewModel {
     this.previewPixelMap = null
     this.cropRect = null
     this.releaseCroppedPreview()
+    this.imageHasAlpha = false
+    this.transparentAsEmpty = false
     this.recommendation = null
     this.recommendationError = ''
     this.customGridWidthText = ''

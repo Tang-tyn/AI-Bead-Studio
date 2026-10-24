@@ -425,8 +425,9 @@ struct ImageImportPage {
       .width('100%')
       .layoutWeight(1)
 
-      // 底部配置 + 按钮区
-      Column() {
+      // 底部配置 + 按钮区（内容超高时可滚动，不压缩上方图片预览区域）
+      Scroll() {
+        Column() {
         if (this.viewModel.errorMsg !== '') {
           Text(this.viewModel.errorMsg)
             .fontSize(12)
@@ -438,8 +439,11 @@ struct ImageImportPage {
         // 网格尺寸预设选择
         this.buildPresetSelector()
 
-        // 图纸风格选择（照片 / 线条图）
+        // 图纸风格选择（照片 / 动漫图 / 线条图）
         this.buildStyleSelector()
+
+        // 透明区域处理（空格 · 异形 / 白底 · 默认）
+        this.buildTransparencySelector()
 
         // 操作按钮行
         Row() {
@@ -489,17 +493,78 @@ struct ImageImportPage {
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 8 })
+        }
+        .width('100%')
+        .padding({ top: 12, bottom: 16 })
       }
       .width('100%')
-      .padding({ top: 12, bottom: 16 })
+      .constraintSize({ maxHeight: '45%' })
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
       .backgroundColor($r('app.color.color_bg_card'))
     }
     .width('100%')
     .layoutWeight(1)
   }
 
-  /** 图纸风格选择器：照片（区域平均） / 动漫图（众数量化色） / 线条图（众数量化+暗线优先+色彩精简） */
+  /** 背景处理选择器：白底（默认，现行为）/ 空格 · 异形（透明区域或白色背景不打豆）；两种图片都可用 */
   @Builder
+  buildTransparencySelector(): void {
+    Column() {
+      Text('背景处理')
+        .fontSize(13)
+        .fontColor($r('app.color.color_text_secondary'))
+        .width('100%')
+        .margin({ bottom: 8 })
+
+      Row() {
+        Button('白底 · 默认')
+          .fontSize(13)
+          .fontColor(!this.viewModel.transparentAsEmpty
+            ? Color.White
+            : $r('app.color.color_text_primary'))
+          .backgroundColor(!this.viewModel.transparentAsEmpty
+            ? $r('app.color.color_primary')
+            : $r('app.color.color_bg_surface'))
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+          .layoutWeight(1)
+          .onClick(() => {
+            this.viewModel.transparentAsEmpty = false
+          })
+
+        Blank().width(8)
+
+        Button('空格 · 异形')
+          .fontSize(13)
+          .fontColor(this.viewModel.transparentAsEmpty
+            ? Color.White
+            : $r('app.color.color_text_primary'))
+          .backgroundColor(this.viewModel.transparentAsEmpty
+            ? $r('app.color.color_primary')
+            : $r('app.color.color_bg_surface'))
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+          .layoutWeight(1)
+          .onClick(() => {
+            this.viewModel.transparentAsEmpty = true
+          })
+      }
+      .width('100%')
+
+      if (this.viewModel.transparentAsEmpty) {
+        Text('背景不打豆：透明区域或与边缘连通的白色背景（图内白色不受影响），成品为图案形状')
+          .fontSize(11)
+          .fontColor($r('app.color.color_text_hint'))
+          .width('100%')
+          .margin({ top: 6 })
+      }
+    }
+    .width('100%')
+    .margin({ bottom: 12 })
+  }
+
+  /** 图纸风格选择器：照片（区域平均） / 动漫图（众数量化色） / 线条图（众数量化+暗线优先+色彩精简） */  @Builder
   buildStyleSelector(): void {
     Column() {
       Text('图纸风格')

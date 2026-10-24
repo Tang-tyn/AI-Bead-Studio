@@ -20,6 +20,8 @@ export class ImageImportData {
   /** 图纸风格序号（页面选择顺序）：0=照片 / 1=动漫图 / 2=线条图 */
   styleIndex: number
   cropRect: CropRect | null
+  /** 背景→空格开关：true 时透明像素或泛洪标记的白色背景占比过半的格子留空（异形拼豆） */
+  transparentAsEmpty: boolean
 
   constructor(
     pixelMap: image.PixelMap | null,
@@ -27,7 +29,8 @@ export class ImageImportData {
     gridHeight: number,
     sourceImageUri: string,
     styleIndex: number,
-    cropRect: CropRect | null = null
+    cropRect: CropRect | null = null,
+    transparentAsEmpty: boolean = false
   ) {
     this.pixelMap = pixelMap
     this.gridWidth = gridWidth
@@ -35,6 +38,7 @@ export class ImageImportData {
     this.sourceImageUri = sourceImageUri
     this.styleIndex = styleIndex
     this.cropRect = cropRect
+    this.transparentAsEmpty = transparentAsEmpty
   }
 }
 

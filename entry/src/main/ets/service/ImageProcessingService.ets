@@ -31,6 +31,16 @@ const LINE_ART_MAX_COLORS: number = 6
 const TRIM_MIN_PIXEL_ABS: number = 3
 const TRIM_PROJECTION_PEAK_RATIO: number = 0.05
 const TRIM_SCAN_BAND_ROWS: number = 32
+const TRANSPARENT_ALPHA_MAX: number = 127
+const TRANSPARENT_EMPTY_SHARE: number = 0.5
+/** 泛洪去白底：RGB 三通道均不低于此值视为近白背景像素（可被挖空）。
+ * 取 200 而非 235：放大过的图片轮廓外有一圈模糊过渡带（纯白→灰渐变），
+ * 阈值太紧会让过渡带卡在泛洪与暗线优先之间形成黑圈 */
+const WHITE_BG_MIN_CHANNEL: number = 200
+/** 背景掩码扩张：与背景相邻的浅色像素（三通道均≥此值）并入背景，吃掉泛洪边界外的残留过渡带 */
+const WHITE_BG_DILATION_MIN_CHANNEL: number = 180
+/** 背景掩码扩张轮数（每轮向浅色像素扩 1 像素） */
+const WHITE_BG_DILATION_ROUNDS: number = 2
 
 /**
  * 内容边界框（线条图模式裁白边用），坐标为原图像素。
@@ -131,6 +141,7 @@ export class ImageProcessingService {
    * @param progressListener 进度监听器；不需要进度时传入 null
    * @param samplingMode 采样模式；线条图模式取区域众数量化色，避免细线被平均成灰色
    * @param cropRect 剪裁区域（源图像素坐标）；null 表示整张图。仅作采样偏移，不修改原 PixelMap
+   * @param transparentAsEmpty 背景→空格开关；true 时透明占比过半（含无透明通道图片中泛洪标记的白色背景）的格子留空（colorId=''，异形拼豆），false 时维持白底合成
    * @returns 按 [row][col] 排列且每格存储 MARD 色号的图纸网格
    */
   async generateGridCells(
@@ -140,7 +151,8 @@ export class ImageProcessingService {
     cancellationToken: ImageProcessingCancellationToken | null,
     progressListener: ImageProcessingProgressListener | null,
     samplingMode: ImageSamplingMode = ImageSamplingMode.PHOTO_AVERAGE,
-    cropRect: CropRect | null = null
+    cropRect: CropRect | null = null,
+    transparentAsEmpty: boolean = false
   ): Promise<GridCell[][]> {
     if (pixelMap === null) {
       throw new Error('待转换的 PixelMap 为空')
@@ -222,10 +234,21 @@ export class ImageProcessingService {
       contentHeight = bounds.height
     }
 
+    // 泛洪去白底：开关打开即计算（不限无透明通道的图）——带 alpha 通道但背景为
+    // 不透明白色的 PNG 同样需要泛洪；真透明区域由 alpha 路径覆盖，计数互斥不重复。
+    // 从剪裁区边缘向内泛洪标记连通白色背景（图内白色不受影响）
+    let backgroundMask: Uint8Array | null = null
+    if (transparentAsEmpty) {
+      backgroundMask = await this.computeWhiteBackgroundMask(
+        actualPixelMap, imageWidth, imageHeight, cropX, cropY, cropWidth, cropHeight,
+        cancellationToken)
+    }
+
     const pixelBuffer: ArrayBuffer = new ArrayBuffer(rowStride * maximumRegionRows)
     const pixelBytes: Uint8Array = new Uint8Array(pixelBuffer)
     const colorMappingService: ColorMappingService = ColorMappingService.getInstance()
     const cells: GridCell[][] = []
+    let nonEmptyCellCount: number = 0
 
     // 内容框按宽高比适配网格，短的一维居中留白，避免图案被拉伸变形（两种模式通用）
     let sampleRowStartGrid: number = 0
@@ -319,6 +342,8 @@ export class ImageProcessingService {
           bucketStats = this.regionBucketStats
           bucketStats.clear()
         }
+        // 背景→空格：统计格子内透明像素数 + 白色背景（泛洪掩码）像素数
+        let emptyPixelCount: number = 0
 
         for (let sourceRow: number = sourceRowStart; sourceRow < sourceRowEnd; sourceRow++) {
           this.throwIfCancelled(cancellationToken)
@@ -327,6 +352,13 @@ export class ImageProcessingService {
             const pixelOffset: number = localRow * rowStride + sourceCol * 4
             const alpha: number = pixelBytes[pixelOffset + 3]
             const alphaRemainder: number = 255 - alpha
+            if (transparentAsEmpty && alpha <= TRANSPARENT_ALPHA_MAX) {
+              emptyPixelCount += 1
+            } else if (backgroundMask !== null &&
+              backgroundMask[sourceRow * imageWidth + sourceCol] === 1) {
+              // else-if：同一像素不会被透明路径和泛洪路径重复计数
+              emptyPixelCount += 1
+            }
             let pixelRed: number
             let pixelGreen: number
             let pixelBlue: number
@@ -372,27 +404,35 @@ export class ImageProcessingService {
         }
 
         if (sampleCount === 0) {
-          // 留白行/列（保持宽高比的填充区）填白格；防御性兜底：无留白色号时报错
+          // 留白行/列（保持宽高比的填充区）：默认填白格；「空格 · 异形」时留空，
+          // 成品形状跟随图案而不是上下左右垫一圈白豆
+          if (transparentAsEmpty) {
+            rowCells.push(new GridCell())
+            continue
+          }
           if (paddingCode !== '') {
             rowCells.push(new GridCell(paddingCode))
+            nonEmptyCellCount += 1
             continue
           }
           throw new Error(`网格单元采样区域为空（${row}, ${col}）`)
         }
 
-        let matchRgb: number[]
+        // 众数选桶 + 暗线判定先于空格判定：细线（胡须等）所在格子背景常占比过半，
+        // 若先判空格会把细线挖断/挖碎；线条图模式下格子带暗线时黑线优先于空格。
+        // （暗线优先冻结版参数：亮度<35、占比≥10%；动漫图模式不做暗线优先，避免柔和色被拖暗）
+        let darkLineWins: boolean = false
+        let bestCount: number = 0
+        let bestRedTotal: number = 0
+        let bestGreenTotal: number = 0
+        let bestBlueTotal: number = 0
+        let darkCount: number = 0
+        let darkRedTotal: number = 0
+        let darkGreenTotal: number = 0
+        let darkBlueTotal: number = 0
         if (bucketStats !== null) {
-          // 众数选桶 + 暗线优先（线条图算法冻结版：亮度<35、占比≥10%）
           // ArkTS 限制：闭包捕获的变量会被装箱，不能对捕获的数组做下标访问，故用标量记录最优桶
           const darkShareThreshold: number = sampleCount * LINE_ART_DARK_MIN_SHARE
-          let bestCount: number = 0
-          let bestRedTotal: number = 0
-          let bestGreenTotal: number = 0
-          let bestBlueTotal: number = 0
-          let darkCount: number = 0
-          let darkRedTotal: number = 0
-          let darkGreenTotal: number = 0
-          let darkBlueTotal: number = 0
           bucketStats.forEach((bucket: number[]) => {
             if (bucket[0] > bestCount) {
               bestCount = bucket[0]
@@ -413,9 +453,19 @@ export class ImageProcessingService {
           if (bestCount === 0) {
             throw new Error(`采样区域统计为空（${row}, ${col}）`)
           }
-          // 暗线优先仅线条图模式：亮度<35 的暗桶占比≥10% 时整格选暗，保细线连通；
-          // 动漫图模式不做暗线优先，避免蓝眼睛/浅阴影等柔和色被拖暗
-          if (darkCount > 0 && useLineArtMode) {
+          darkLineWins = darkCount > 0 && useLineArtMode
+        }
+
+        if (!darkLineWins && transparentAsEmpty &&
+          emptyPixelCount >= sampleCount * TRANSPARENT_EMPTY_SHARE) {
+          // 背景→空格：过半像素为透明或白色背景时整格留空（异形拼豆），不匹配颜色
+          rowCells.push(new GridCell())
+          continue
+        }
+
+        let matchRgb: number[]
+        if (bucketStats !== null) {
+          if (darkLineWins) {
             matchRgb = [
               Math.round(darkRedTotal / darkCount),
               Math.round(darkGreenTotal / darkCount),
@@ -440,6 +490,7 @@ export class ImageProcessingService {
           throw new Error(`颜色匹配返回非当前 MARD 色卡色号：${matchedColor.code}`)
         }
         rowCells.push(new GridCell(matchedColor.code))
+        nonEmptyCellCount += 1
       }
 
       cells.push(rowCells)
@@ -454,6 +505,10 @@ export class ImageProcessingService {
 
     if (useLineArtMode) {
       this.simplifyLineArtColors(cells, paletteService)
+    }
+
+    if (transparentAsEmpty && nonEmptyCellCount === 0) {
+      throw new Error('图片内容几乎全部为背景（透明或白色），无法生成图纸；可改选「白底」或更换图片')
     }
 
     return cells
@@ -655,6 +710,243 @@ export class ImageProcessingService {
     }
   }
 
+  /**
+   * 泛洪去白底：把与剪裁区边缘连通的近白色像素标记为背景。
+   * 仅在图片无透明通道且「背景→空格」开关打开时调用；
+   * 种子为剪裁区四边上的近白像素，沿 4 邻域扩散，图内不与边缘连通的白色不受影响。
+   * @param pixelMap 源图 PixelMap（只读，不修改）
+   * @param imageWidth 源图宽（像素），掩码按源图绝对坐标索引
+   * @param imageHeight 源图高（像素），用于掩码容量
+   * @param cropX 剪裁区左上角横坐标（源图像素）
+   * @param cropY 剪裁区左上角纵坐标（源图像素）
+   * @param cropWidth 剪裁区宽（像素）
+   * @param cropHeight 剪裁区高（像素）
+   * @param cancellationToken 可取消令牌
+   * @returns 背景掩码（按源图绝对坐标索引，1=背景）；剪裁区外恒为 0
+   */
+  private async computeWhiteBackgroundMask(
+    pixelMap: image.PixelMap,
+    imageWidth: number,
+    imageHeight: number,
+    cropX: number,
+    cropY: number,
+    cropWidth: number,
+    cropHeight: number,
+    cancellationToken: ImageProcessingCancellationToken | null
+  ): Promise<Uint8Array> {
+    // 一次性读入整个剪裁区（最大 2000×2000×4 ≈ 16MB，可接受）
+    const cropPixels: ArrayBuffer = new ArrayBuffer(cropWidth * cropHeight * 4)
+    const area: image.PositionArea = {
+      pixels: cropPixels,
+      offset: 0,
+      stride: cropWidth * 4,
+      region: {
+        x: cropX,
+        y: cropY,
+        size: {
+          width: cropWidth,
+          height: cropHeight
+        }
+      }
+    }
+    try {
+      await pixelMap.readPixels(area)
+    } catch (err) {
+      const message: string = err instanceof Error ? err.message : '未知错误'
+      throw new Error('读取图片像素失败（去白底）：' + message)
+    }
+    const bytes: Uint8Array = new Uint8Array(cropPixels)
+    const mask: Uint8Array = new Uint8Array(imageWidth * imageHeight)
+    // BFS 队列存剪裁区相对下标（localRow * cropWidth + localCol）
+    const queue: Int32Array = new Int32Array(cropWidth * cropHeight)
+    let queueHead: number = 0
+    let queueTail: number = 0
+
+    // 种子：剪裁区四边上的近白像素（缓冲区按剪裁区相对坐标摆放，通道顺序与采样循环一致：红在 +2）
+    const totalEdgePixels: number = cropWidth * 2 + cropHeight * 2
+    for (let edgeIndex: number = 0; edgeIndex < totalEdgePixels; edgeIndex++) {
+      let localCol: number
+      let localRow: number
+      if (edgeIndex < cropWidth) {
+        localCol = edgeIndex
+        localRow = 0
+      } else if (edgeIndex < cropWidth * 2) {
+        localCol = edgeIndex - cropWidth
+        localRow = cropHeight - 1
+      } else if (edgeIndex < cropWidth * 2 + cropHeight) {
+        localCol = 0
+        localRow = edgeIndex - cropWidth * 2
+      } else {
+        localCol = cropWidth - 1
+        localRow = edgeIndex - cropWidth * 2 - cropHeight
+      }
+      const localIndex: number = localRow * cropWidth + localCol
+      const pixelOffset: number = localIndex * 4
+      const absIndex: number = (cropY + localRow) * imageWidth + cropX + localCol
+      if (mask[absIndex] === 0 &&
+        bytes[pixelOffset + 2] >= WHITE_BG_MIN_CHANNEL &&
+        bytes[pixelOffset + 1] >= WHITE_BG_MIN_CHANNEL &&
+        bytes[pixelOffset] >= WHITE_BG_MIN_CHANNEL) {
+        mask[absIndex] = 1
+        queue[queueTail] = localIndex
+        queueTail += 1
+      }
+    }
+
+    // BFS：4 邻域扩散，仅进入近白像素（图内白色被非白边界挡住，不会被挖掉）
+    while (queueHead < queueTail) {
+      this.throwIfCancelled(cancellationToken)
+      const localIndex: number = queue[queueHead]
+      queueHead += 1
+      const localRow: number = Math.floor(localIndex / cropWidth)
+      const localCol: number = localIndex - localRow * cropWidth
+      // 上邻
+      if (localRow > 0) {
+        const nIndex: number = (localRow - 1) * cropWidth + localCol
+        const nOffset: number = nIndex * 4
+        const nAbs: number = (cropY + localRow - 1) * imageWidth + cropX + localCol
+        if (mask[nAbs] === 0 && bytes[nOffset + 2] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset + 1] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset] >= WHITE_BG_MIN_CHANNEL) {
+          mask[nAbs] = 1
+          queue[queueTail] = nIndex
+          queueTail += 1
+        }
+      }
+      // 下邻
+      if (localRow < cropHeight - 1) {
+        const nIndex: number = (localRow + 1) * cropWidth + localCol
+        const nOffset: number = nIndex * 4
+        const nAbs: number = (cropY + localRow + 1) * imageWidth + cropX + localCol
+        if (mask[nAbs] === 0 && bytes[nOffset + 2] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset + 1] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset] >= WHITE_BG_MIN_CHANNEL) {
+          mask[nAbs] = 1
+          queue[queueTail] = nIndex
+          queueTail += 1
+        }
+      }
+      // 左邻
+      if (localCol > 0) {
+        const nIndex: number = localRow * cropWidth + localCol - 1
+        const nOffset: number = nIndex * 4
+        const nAbs: number = (cropY + localRow) * imageWidth + cropX + localCol - 1
+        if (mask[nAbs] === 0 && bytes[nOffset + 2] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset + 1] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset] >= WHITE_BG_MIN_CHANNEL) {
+          mask[nAbs] = 1
+          queue[queueTail] = nIndex
+          queueTail += 1
+        }
+      }
+      // 右邻
+      if (localCol < cropWidth - 1) {
+        const nIndex: number = localRow * cropWidth + localCol + 1
+        const nOffset: number = nIndex * 4
+        const nAbs: number = (cropY + localRow) * imageWidth + cropX + localCol + 1
+        if (mask[nAbs] === 0 && bytes[nOffset + 2] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset + 1] >= WHITE_BG_MIN_CHANNEL &&
+          bytes[nOffset] >= WHITE_BG_MIN_CHANNEL) {
+          mask[nAbs] = 1
+          queue[queueTail] = nIndex
+          queueTail += 1
+        }
+      }
+    }
+    // 扩张：把与背景相邻的浅色残留过渡带并入背景，避免其落入暗线优先形成黑圈
+    this.dilateWhiteBackgroundMask(
+      bytes, mask, imageWidth, cropX, cropY, cropWidth, cropHeight)
+    return mask
+  }
+
+  /**
+   * 背景掩码扩张：每轮把「与背景像素 4 邻域相邻、且三通道均不低于
+   * WHITE_BG_DILATION_MIN_CHANNEL 的浅色像素」并入背景，共 WHITE_BG_DILATION_ROUNDS 轮。
+   * 深色轮廓（黑线）不满足浅色条件，会挡住扩张——图内白色主体不会被吃掉。
+   * @param bytes 剪裁区像素缓冲（computeWhiteBackgroundMask 已读入，通道顺序红在 +2）
+   * @param mask 背景掩码（按源图绝对坐标索引，就地修改）
+   * @param imageWidth 源图宽（像素）
+   * @param cropX 剪裁区左上角横坐标（源图像素）
+   * @param cropY 剪裁区左上角纵坐标（源图像素）
+   * @param cropWidth 剪裁区宽（像素）
+   * @param cropHeight 剪裁区高（像素）
+   */
+  private dilateWhiteBackgroundMask(
+    bytes: Uint8Array,
+    mask: Uint8Array,
+    imageWidth: number,
+    cropX: number,
+    cropY: number,
+    cropWidth: number,
+    cropHeight: number
+  ): void {
+    for (let round: number = 0; round < WHITE_BG_DILATION_ROUNDS; round++) {
+      // 本轮新增用独立数组记录，避免迭代顺序导致扩张方向各向异性
+      const added: Uint8Array = new Uint8Array(cropWidth * cropHeight)
+      for (let localRow: number = 0; localRow < cropHeight; localRow++) {
+        for (let localCol: number = 0; localCol < cropWidth; localCol++) {
+          const localIndex: number = localRow * cropWidth + localCol
+          const absIndex: number = (cropY + localRow) * imageWidth + cropX + localCol
+          if (mask[absIndex] === 1 || added[localIndex] === 1) {
+            continue
+          }
+          const pixelOffset: number = localIndex * 4
+          // 浅色判定：三通道均不低于扩张阈值（深色轮廓被挡住，白主体在轮廓内侧也接触不到）
+          if (bytes[pixelOffset + 2] < WHITE_BG_DILATION_MIN_CHANNEL ||
+            bytes[pixelOffset + 1] < WHITE_BG_DILATION_MIN_CHANNEL ||
+            bytes[pixelOffset] < WHITE_BG_DILATION_MIN_CHANNEL) {
+            continue
+          }
+          // 4 邻域任一已是背景（含本轮新增）即并入
+          let touchesBackground: boolean = false
+          if (localRow > 0) {
+            const nIndex: number = localIndex - cropWidth
+            if (mask[(cropY + localRow - 1) * imageWidth + cropX + localCol] === 1 ||
+              added[nIndex] === 1) {
+              touchesBackground = true
+            }
+          }
+          if (!touchesBackground && localRow < cropHeight - 1) {
+            const nIndex: number = localIndex + cropWidth
+            if (mask[(cropY + localRow + 1) * imageWidth + cropX + localCol] === 1 ||
+              added[nIndex] === 1) {
+              touchesBackground = true
+            }
+          }
+          if (!touchesBackground && localCol > 0) {
+            const nIndex: number = localIndex - 1
+            if (mask[(cropY + localRow) * imageWidth + cropX + localCol - 1] === 1 ||
+              added[nIndex] === 1) {
+              touchesBackground = true
+            }
+          }
+          if (!touchesBackground && localCol < cropWidth - 1) {
+            const nIndex: number = localIndex + 1
+            if (mask[(cropY + localRow) * imageWidth + cropX + localCol + 1] === 1 ||
+              added[nIndex] === 1) {
+              touchesBackground = true
+            }
+          }
+          if (touchesBackground) {
+            added[localIndex] = 1
+          }
+        }
+      }
+      // 合并本轮新增到掩码
+      let hasAddition: boolean = false
+      for (let localIndex: number = 0; localIndex < cropWidth * cropHeight; localIndex++) {
+        if (added[localIndex] === 1) {
+          const localRow: number = Math.floor(localIndex / cropWidth)
+          const localCol: number = localIndex - localRow * cropWidth
+          mask[(cropY + localRow) * imageWidth + cropX + localCol] = 1
+          hasAddition = true
+        }
+      }
+      if (!hasAddition) {
+        break
+      }
+    }
+  }
 
   private validateGridSize(gridWidth: number, gridHeight: number): void {
     if (!Number.isInteger(gridWidth) || gridWidth < GRID_MIN_SIZE || gridWidth > GRID_MAX_SIZE ||

@@ -119,7 +119,23 @@ export struct BeadGrid {
       let col: number = 0
       while (col < gridWidth) {
         const colorCode: string | null = this.getCellColorCode(row, col)
-        if (colorCode === null || colorCode === '') {
+        if (colorCode === '') {
+          // 空格（透明→空格）：浅灰底示意"此处不打豆"，保留网格形状可读
+          let emptyEnd: number = col + 1
+          while (emptyEnd < gridWidth && this.getCellColorCode(row, emptyEnd) === '') {
+            emptyEnd++
+          }
+          this.context.fillStyle = '#EFEFEF'
+          this.context.fillRect(
+            originX + col * cellSize,
+            originY + row * cellSize,
+            (emptyEnd - col) * cellSize,
+            cellSize
+          )
+          col = emptyEnd
+          continue
+        }
+        if (colorCode === null) {
           col++
           continue
         }
